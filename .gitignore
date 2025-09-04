@@ -1,0 +1,6 @@
+# Rust
+target/
+
+# C
+build/
+*.o
