@@ -28,12 +28,13 @@ impl ProofOfWork {
     fn calculate_hash(&self, nonce: u64) -> String {
         let mut hasher = Sha256::new();
         hasher.update(format!(
-            "{}{}{}{}{}", 
+            "{}{}{}{}{}{}", 
             self.block.index, 
             self.block.timestamp, 
             &self.block.data, 
             &self.block.previous_hash, 
-            nonce
+            nonce,
+            self.block.difficulty
         ));
         format!("{:x}", hasher.finalize())
     }
