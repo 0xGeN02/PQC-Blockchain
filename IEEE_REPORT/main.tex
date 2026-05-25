@@ -1,0 +1,454 @@
+\documentclass[journal,onecolumn,11pt]{IEEEtran}
+
+% --- Standard packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{url}
+\usepackage{cite}
+\usepackage[hidelinks]{hyperref}
+
+% Listings for code snippets
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible,
+  frame=single,
+  framesep=4pt,
+  framerule=0.2pt,
+  rulecolor=\color{black!30},
+}
+
+\IEEEoverridecommandlockouts
+
+\begin{document}
+
+\title{PostQuantumEVM: A Native Lattice-Based Transaction Type and Proof-of-Authority Consensus for Ethereum Execution Clients}
+
+\author{%
+  Manuel~M.~Delgado-Gambino~L\'opez%
+  \thanks{Manuel M. Delgado-Gambino L\'opez is with the School of Engineering and Information Technologies, Universidad Intercontinental de la Empresa (UIE), Madrid, Spain (e-mail: manuelmateodgl02@gmail.com).}%
+  \thanks{Manuscript prepared as the technical report companion to the undergraduate final project ``Analysis and Mitigation of Quantum Vulnerabilities in Blockchain Networks (EVM): a Lattice-Based Cryptography Approach,'' Bachelor's Degree in Intelligent Systems Engineering, May 2026.}%
+}
+
+\markboth{IEEE Transactions Style Technical Report, May~2026}%
+{Delgado-Gambino L\'opez: PostQuantumEVM}
+
+\maketitle
+
+\begin{abstract}
+Ethereum's transaction layer relies on ECDSA over secp256k1, an elliptic-curve scheme that Shor's algorithm reduces to polynomial time on a cryptographically relevant quantum computer (CRQC). With expert estimates placing CRQC availability within a 10--15 year horizon and a full chain migration requiring 6--13 years, the transition window is already open under the \emph{harvest-now-decrypt-later} threat model. This paper presents \textbf{PostQuantumEVM}, a complete implementation of a quantum-resistant Ethereum execution layer that introduces (i)~a native EIP-2718 transaction type \texttt{0x50} carrying an ML-DSA-65 (FIPS-204) signature and public key; (ii)~a new EVM opcode \texttt{PQHASH} (\texttt{0x21}) exposing SHAKE-256 to smart contracts; (iii)~a verification precompile at address \texttt{0x0100}; (iv)~a Proof-of-Authority consensus engine sealing blocks with ML-DSA-65; and (v)~a complete post-quantum wallet and a multi-node end-to-end test suite. The implementation modifies the \emph{reth} client and is validated by 34 unit tests across five PQ crates, 27 end-to-end tests across single- and multi-node configurations, and quantum simulations of Shor's algorithm (ECDLP) and Grover's algorithm (hash preimage) on a reduced model. Empirical benchmarks on a Ryzen~5 7600X show ML-DSA-65 verification is approximately 14\% faster than the equivalent pure-Rust ECDSA implementation (42~\textmu s vs.\ 49.2~\textmu s), at the cost of a $\sim$46$\times$ growth in transaction size (115~B vs.\ 5{,}334~B) and a $\sim$79\% drop in best-case throughput on a 12~s slot. We provide an open EIP draft formalizing the type and discuss the path to a post-quantum proof-of-stake consensus, the principal obstacle of which remains the absence of a standardized lattice-based aggregable signature scheme.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Post-quantum cryptography, blockchain, Ethereum, ML-DSA, lattice-based signatures, FIPS-204, EIP-2718, quantum threat, Shor's algorithm, Grover's algorithm.
+\end{IEEEkeywords}
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+\IEEEPARstart{T}{he} security of Ethereum's transaction layer~\cite{wood2014ethereum,buterin2014ethereum} ultimately reduces to two computational problems: the elliptic-curve discrete logarithm problem (ECDLP) over secp256k1, which authenticates every externally-originated transaction through ECDSA, and the preimage resistance of Keccak-256, which protects state and transaction integrity through the Merkle Patricia Trie. Both assumptions are concretely undermined by quantum algorithms: Shor's algorithm~\cite{shor1994} solves ECDLP in polynomial time on a CRQC, while Grover's algorithm~\cite{grover1996} halves the effective preimage security of any hash function.
+
+The 2024 publication of the first three NIST post-quantum standards (ML-KEM in FIPS-203~\cite{nistfips203}, ML-DSA in FIPS-204~\cite{nistfips204}, and SLH-DSA in FIPS-205~\cite{nistfips205}) closes the algorithmic gap and enables concrete protocol-level migrations. The remaining engineering question is how to integrate these primitives into a live, contract-rich blockchain without breaking application compatibility or imposing a hard cut-over.
+
+Existing work in this space has so far stopped short of a functional client-level implementation: surveys characterize the threat surface and enumerate algorithm choices~\cite{quantumresistance2023,berdik2023survey,kiktenko2018quantumsafe}; recent Ethereum Improvement Proposals (EIP-7932~\cite{eip7932}, EIP-8051~\cite{eip8051}) sketch the specification of a secondary signature algorithm and an ML-DSA verification precompile but do not include a client implementation, a wallet, or multi-node validation; Hyperledger Fabric prototypes~\cite{lee2024quantumsafefabric} demonstrate ML-DSA at the application layer in a permissioned setting that lacks the dynamics of a public EVM chain.
+
+\subsection*{Contributions}
+This paper makes the following contributions.
+
+\begin{enumerate}
+  \item We define and implement a new EIP-2718 typed transaction \texttt{0x50} that carries an ML-DSA-65 signature (3{,}309~B) and public key (1{,}952~B), with explicit domain separation in the signing hash to prevent cross-type replay.
+  \item We extend the EVM with two PQ-native primitives: an opcode \texttt{PQHASH} (\texttt{0x21}) computing SHAKE-256 with the same gas model as \texttt{KECCAK256}, and a verification precompile at \texttt{0x0100} that accepts $(h, \sigma, \mathit{pk})$ tuples and returns an ABI-encoded boolean.
+  \item We replace ECDSA-vulnerable precompiles (\texttt{ecrecover}, BN254 pairings, KZG, BLS12-381) with revert stubs and design a Proof-of-Authority consensus engine that seals blocks with ML-DSA-65 in round-robin rotation.
+  \item We deliver a complete post-quantum wallet (CLI and TUI), a multi-node Docker Compose / Kubernetes deployment, and a 15-scenario end-to-end test suite covering chain identity, consensus, fee model, PQ transactions, smart contracts, and multi-node consistency.
+  \item We validate the threat model with quantum simulations: Shor's algorithm against a reduced toy curve $y^2 = x^3 + 7 \pmod{17}$ with generator $(6,11)$ and order $18$ (recovering the private key for all 17 non-trivial scalars), and Grover's algorithm against a 4-bit reduced Keccak (verifying the $\sqrt{N}$ speedup).
+  \item We provide empirical performance numbers on a Ryzen~5 7600X, with a formal EIP draft (\texttt{eip-pq-tx.md}) that documents specification, rationale, backwards compatibility, security considerations, and reference implementation.
+\end{enumerate}
+
+To the best of the author's knowledge, this is the first end-to-end functional implementation of a native post-quantum transaction type in a modified Ethereum execution client with multi-node consensus validation.
+
+The remainder of the paper is organized as follows. Section~\ref{sec:background} reviews ECDSA, Shor's and Grover's algorithms, lattice-based cryptography, and the relevant Ethereum substrate. Section~\ref{sec:related} situates the work against the state of the art. Section~\ref{sec:design} describes the system design. Section~\ref{sec:impl} discusses implementation details and deployment. Section~\ref{sec:quantum} reports on the quantum simulations. Section~\ref{sec:eval} presents the experimental evaluation. Section~\ref{sec:security} provides a security analysis. Section~\ref{sec:discussion} discusses limitations and future work. Section~\ref{sec:conclusion} concludes.
+
+% ============================================================
+\section{Background and Threat Model}
+\label{sec:background}
+% ============================================================
+
+\subsection{ECDSA and the Quantum Threat to ECDLP}
+\label{sec:bg_ecdsa}
+
+Ethereum uses ECDSA over secp256k1, the Koblitz curve $y^2 = x^3 + 7$ over $\mathbb{F}_p$ with $p = 2^{256} - 2^{32} - 977$. The security of every signature reduces to the intractability of ECDLP: given $Q = k \cdot G$ for a public generator $G$, recover $k$. Classical algorithms (Pollard $\rho$, baby-step giant-step) achieve $\Theta(\sqrt{n}) \approx 2^{128}$ for the group of order $n \approx 2^{256}$.
+
+Shor's algorithm reduces ECDLP to a hidden subgroup problem over $\mathbb{Z}_n \times \mathbb{Z}_n$ and recovers $k$ in $O(\log^3 n)$ quantum operations. Recent resource estimates~\cite{taguchi2025coordinates} place a fault-tolerant attack on secp256k1 at $\sim$2{,}330 logical qubits, translating to millions of physical qubits under realistic error-correction overheads. Independent surveys of the quantum hardware community~\cite{mosca2023quantum} place the probability of a CRQC within 15 years above 50\%.
+
+Two structural facts make the Ethereum exposure particularly acute. First, every account that has ever signed a transaction has its public key on-chain (recoverable from $(v,r,s)$ via \texttt{ecrecover}). Second, the \emph{harvest-now-decrypt-later} model means that signatures produced today are at risk retroactively: an adversary can record all current transactions and recover the corresponding private keys once a CRQC is available, without needing real-time access.
+
+\subsection{Grover's Algorithm and Hash Functions}
+\label{sec:bg_grover}
+
+For an unstructured search over $N = 2^n$ inputs with $M$ marked elements, Grover's algorithm requires $O(\sqrt{N/M})$ oracle queries~\cite{grover1996}. Applied to preimage search, this halves the effective security: Keccak-256, classically offering $2^{256}$ preimage resistance, drops to $2^{128}$ quantum operations---still infeasible. For collision search, the BHT algorithm~\cite{brassard1997bht} achieves $\Theta(2^{n/3})$ quantum queries with $\Theta(2^{n/3})$ memory, yielding $2^{85}$ for a 256-bit hash; this is the principal reason why output lengths below 256 bits are discouraged in post-quantum design.
+
+\subsection{Lattice-Based Cryptography and ML-DSA}
+\label{sec:bg_mldsa}
+
+A lattice $\mathcal{L}(\mathbf{B}) = \{\sum z_i \mathbf{b}_i : z_i \in \mathbb{Z}\}$ in $\mathbb{R}^n$ defines a family of computational problems---SVP (shortest vector), CVP (closest vector), SIS (short integer solution)---that admit \emph{worst-case to average-case} reductions~\cite{ajtai1996,regev2005,lenstra1982lll}: an algorithm solving a random instance implies one solving the worst case of approximate SVP. No known quantum algorithm achieves the asymptotic speedup over these problems that Shor delivers for factoring and discrete logarithms.
+
+Module-Learning-With-Errors (Module-LWE), the assumption underlying ML-DSA, operates over $R_q = \mathbb{Z}_q[X]/(X^{256}+1)$ with $q = 8\,380\,417$. Public keys $(\mathbf{A}, \mathbf{t})$ encode $\mathbf{t} = \mathbf{A}\mathbf{s}_1 + \mathbf{s}_2$ with $\mathbf{s}_1, \mathbf{s}_2$ small; signing uses Fiat-Shamir with aborts on a commitment $\mathbf{w} = \mathbf{A}\mathbf{y}$, releasing $(\mathbf{z}, h, c)$ where $\mathbf{z} = \mathbf{y} + c\mathbf{s}_1$. ML-DSA-65 (NIST security level III) was standardized as FIPS-204~\cite{nistfips204} and originates from the CRYSTALS-Dilithium proposal~\cite{ducas2018dilithium}.
+
+A critical design point for this work is that FIPS-204 specifies \emph{two} modes for the masking seed: a \emph{deterministic} mode where the seed is derived from $(\mathsf{sk}, m)$ alone, and a \emph{hedged} mode that mixes in fresh randomness. The reference NIST implementation and the RustCrypto \texttt{ml-dsa} crate used in our implementation default to hedged. In neither mode does the uniqueness of a signature depend on a signer-controlled external nonce (as it does with the $r_{\text{nonce}}$ of ECDSA), so the structural malleability $(r, s) \leftrightarrow (r, n{-}s)$ that motivated EIP-2 in Ethereum does not arise. We frame ML-DSA's malleability resistance in those terms.
+
+The companion KEM standard ML-KEM~\cite{nistfips203,bos2018kyber} is used in this work as a future-facing primitive for node-to-node channels (Section~\ref{sec:discussion}); it is not exposed on the transaction surface.
+
+\subsection{Typed Transactions and the EVM Substrate}
+\label{sec:bg_evm}
+
+EIP-2718~\cite{eip2718} defines a typed-transaction envelope of the form $\texttt{TransactionType} \,\|\, \texttt{TransactionPayload}$, where the first byte selects the payload format. Existing types include \texttt{0x00} (legacy), \texttt{0x01} (EIP-2930 access list), \texttt{0x02} (EIP-1559~\cite{eip1559} dynamic fees), \texttt{0x03} (EIP-4844 blob transactions), and \texttt{0x04} (EIP-7702 code delegation). Our design assigns \texttt{0x50} to post-quantum transactions; the high nibble \texttt{5} doubles as a mnemonic for \emph{post-quantum} and leaves the range \texttt{0x05}--\texttt{0x4f} free for future classical types.
+
+The EVM itself is a deterministic stack machine over 256-bit words, with hash primitives (\texttt{KECCAK256}), elliptic-curve precompiles (\texttt{ecrecover}, BN254, BLS12-381, KZG), and a per-opcode gas accounting mechanism. From the standpoint of post-quantum migration, we identify the following surface: (i)~\texttt{ecrecover} at \texttt{0x01} is broken by Shor; (ii)~BN254 (\texttt{0x06}--\texttt{0x08}), KZG (\texttt{0x0a}), and BLS12-381 (\texttt{0x0b}--\texttt{0x13}) are likewise broken by Shor through the discrete logarithm in their respective groups; (iii)~hash precompiles (\texttt{0x02} SHA-256, \texttt{0x03} RIPEMD-160, \texttt{0x09} Blake2f), \texttt{IDENTITY} (\texttt{0x04}), and modular exponentiation (\texttt{0x05}) remain safe.
+
+% ============================================================
+\section{Related Work}
+\label{sec:related}
+% ============================================================
+
+The literature on post-quantum blockchains splits into three categories: \emph{analyses} that characterize the threat surface; \emph{specifications} that propose protocol-level changes; and \emph{implementations} that integrate post-quantum primitives into a working stack. Our work belongs to the third category and is, to the best of our knowledge, the first to do so natively in a modified Ethereum execution client.
+
+\subsubsection*{Analyses} Fern\'andez-Caram\'es and Fraga-Lamas~\cite{quantumresistance2023} provide a Nature-published overview of quantum threats to public blockchains, classifying primitives by vulnerability. Berdik et al.~\cite{berdik2023survey} compare quantum and post-quantum proposals across consensus, signature, and key-exchange dimensions. These works motivate but do not implement.
+
+\subsubsection*{Specifications} EIP-7932~\cite{eip7932} proposes a framework for secondary signature algorithms in Ethereum, designed for future extensibility but without committing to a concrete post-quantum scheme at the type level. EIP-8051~\cite{eip8051} more concretely specifies an ML-DSA verification precompile, leaving the signature itself outside the transaction envelope (i.e., to be carried as calldata to a contract). Our design differs in that ML-DSA-65 is the \emph{native} signature of the transaction, sealed within the EIP-2718 envelope and verified by the client as part of admission to the mempool.
+
+\subsubsection*{Implementations} Kiktenko et al.~\cite{kiktenko2018quantumsafe} demonstrate a quantum-secured blockchain using QKD plus hash-based signatures in a custom stack. Lee et al.~\cite{lee2024quantumsafefabric} prototype ML-DSA in Hyperledger Fabric. Both target permissioned settings and do not address the open-set validator scaling or the dynamics of a public EVM chain. Our prototype is, by contrast, an actual fork of \emph{reth}~\cite{reth} with native transaction type, consensus engine, and multi-node operation.
+
+\subsubsection*{Post-quantum aggregation} A separate body of work investigates aggregable lattice-based signatures, motivated by the same scaling concern that BLS aggregation solves in the classical setting. Squirrel~\cite{fleischhacker2022squirrel} and its successor Chipmunk~\cite{fleischhacker2023chipmunk} achieve logarithmic-size aggregate signatures under SIS, at the cost of a synchronized setup. STARK-based aggregation is a complementary approach with attractive asymptotic size at the cost of non-trivial prover time. None has reached the standardization maturity required to replace BLS12-381 in a $\sim 10^6$-validator proof-of-stake consensus; we adopt PoA as a pragmatic compromise (Section~\ref{sec:design}-F) and discuss the path forward in Section~\ref{sec:discussion}.
+
+% ============================================================
+\section{System Design}
+\label{sec:design}
+% ============================================================
+
+The system extends the Ethereum protocol along four axes: transaction format, EVM instruction set, consensus, and client implementation. We describe each in turn.
+
+\subsection{Transaction Type \texttt{0x50}}
+\label{sec:design_tx}
+
+A post-quantum transaction is encoded as
+\[
+\texttt{0x50} \,\|\, \mathrm{RLP}([\texttt{chain\_id}, \texttt{nonce}, \texttt{gas\_price}, \texttt{gas\_limit}, \texttt{to}, \texttt{value}, \texttt{input}, \sigma, \mathit{pk}]),
+\]
+with $\sigma$ a 3{,}309-byte ML-DSA-65 signature and $\mathit{pk}$ a 1{,}952-byte ML-DSA-65 public key. The signing hash is computed as
+\begin{equation}
+h_{\text{sign}} = \mathrm{SHAKE\text{-}256}\bigl(\,\texttt{0x50}\,\|\, F(T)\,,\,32\bigr),
+\label{eq:sign_hash}
+\end{equation}
+where $F(T)$ is a big-endian concatenation of the typed transaction fields and the leading \texttt{0x50} byte provides explicit domain separation across EIP-2718 types. The transaction identifier is
+\begin{equation}
+h_{\text{tx}} = \mathrm{SHAKE\text{-}256}(\texttt{0x50}\,\|\, h_{\text{sign}}\,\|\,\sigma\,\|\,\mathit{pk}\,,\,32).
+\label{eq:tx_hash}
+\end{equation}
+
+Two design points deserve discussion. First, ML-DSA-65 does not support public-key recovery from $(m, \sigma)$ in the way ECDSA does; the public key must be transmitted explicitly with every transaction, which dominates the size cost. Second, the type-\texttt{0x50} envelope intentionally uses a flat \texttt{gas\_price} (legacy fee model) rather than the EIP-1559 triple \texttt{(max\_fee\_per\_gas, max\_priority\_fee\_per\_gas, base\_fee)}; this minimizes the signed field set and is independent of whether the underlying client computes \texttt{baseFeePerGas} at the block level (which it does, since our prototype inherits reth's post-Merge fee logic). Extending \texttt{0x50} to carry the dynamic-fee fields is straightforward and is listed as future work.
+
+\subsection{Address Derivation}
+\label{sec:design_addr}
+
+Post-quantum addresses derive from the public key via SHAKE-256:
+\begin{equation}
+\texttt{address} = \mathrm{SHAKE\text{-}256}(\mathit{pk}, 32)[12{:}32].
+\label{eq:address}
+\end{equation}
+Using SHAKE-256 (rather than Keccak-256, which Ethereum uses for classical addresses) provides cryptographic separation between classical and PQ address spaces: even if a malicious party constructs an ML-DSA-65 public key whose Keccak-256 hash collides with an existing classical address, the resulting PQ address would not collide. The two address namespaces remain in the same 20-byte format, so existing smart contracts that operate on addresses (transfers, mappings, event topics) work without modification.
+
+\subsection{Opcode \texttt{PQHASH} (\texttt{0x21})}
+\label{sec:design_pqhash}
+
+We allocate the next available opcode slot adjacent to \texttt{KECCAK256} (\texttt{0x20}) to expose SHAKE-256 to contract code. \texttt{PQHASH} takes \texttt{(offset, length)} from the stack, expands memory if needed, and pushes the 32-byte SHAKE-256 output. Gas cost mirrors \texttt{KECCAK256}: 30 base plus 6 per 32-byte word. The choice of opcode over precompile is deliberate: a smart contract calling a precompile for the same operation would pay an additional $G_{\text{call}} = 700$ gas for the \texttt{STATICCALL} itself, plus 100--2{,}600 gas for the EIP-2929 access list (warm/cold), plus 3 gas per word of \emph{calldata} marshalling and \emph{returndata} copy. For a 32-byte input, this overhead is roughly $\sim$800 to $\sim$3{,}300 gas above what \texttt{PQHASH} charges; the opcode eliminates it entirely.
+
+\subsection{ML-DSA-65 Verification Precompile (\texttt{0x0100})}
+\label{sec:design_precompile}
+
+Contract-level verification of ML-DSA-65 signatures is exposed at the precompile address \texttt{0x0100}. The input is the 5{,}293-byte concatenation $h \,\|\, \sigma \,\|\, \mathit{pk}$ (32 + 3{,}309 + 1{,}952). The output is \texttt{uint256(1)} on valid signature, \texttt{uint256(0)} otherwise, ABI-encoded as 32 bytes.
+
+The gas cost is calibrated from measured latency:
+\begin{equation}
+\text{gas}_{\text{theory}} = \lceil 42 \,\mathrm{\mu s} \cdot 61 \,\text{gas}/\mathrm{\mu s} \cdot 1.35 \rceil = 3{,}459.
+\label{eq:gas_calib}
+\end{equation}
+The production constant is rounded down to the nearest multiple of 50, $\text{gas}_{\text{prod}} = 3{,}450$, aligning with the cost convention of existing precompiles (\texttt{ecrecover}: 3{,}000; \texttt{sha256base}: 60; \texttt{ripemd160base}: 600). The 1.35 safety factor accommodates platform variability and conservative side-channel margin.
+
+\subsection{Disabled Precompiles}
+\label{sec:design_disabled}
+
+The PoA fork disables thirteen Shor-vulnerable precompiles by replacing their implementation with a revert stub: \texttt{ecrecover} (\texttt{0x01}), BN254 add/mul/pairing (\texttt{0x06}--\texttt{0x08}), KZG point evaluation (\texttt{0x0a}), and the nine BLS12-381 operations (\texttt{0x0b}--\texttt{0x13}). The five quantum-safe precompiles---SHA-256 (\texttt{0x02}), RIPEMD-160 (\texttt{0x03}), \texttt{IDENTITY} (\texttt{0x04}), modular exponentiation (\texttt{0x05}), Blake2f (\texttt{0x09})---are preserved. In a real-world deployment, the transition strategy would keep \texttt{ecrecover} active during a grace window to verify historical signatures; the prototype here is a forward-looking proof of concept and disables it immediately to surface any contract incompatibilities.
+
+\subsection{Proof-of-Authority Consensus with ML-DSA-65 Seals}
+\label{sec:design_consensus}
+
+A natural reflex is to retain proof-of-stake and merely substitute the validator signature algorithm. This is not yet practical: PoS on Ethereum relies on BLS12-381 aggregation to combine the attestations of $\sim$$10^6$ validators into a constant-size signature, and no standardized post-quantum scheme offers comparable aggregation. Without aggregation, each block would have to carry one ML-DSA-65 signature per attesting validator---roughly $10^6 \cdot 3{,}309 \approx 3.3$~GB per block, several orders of magnitude beyond viable.
+
+We therefore adopt Proof-of-Authority for the prototype, with a small, known validator set. Each block header carries an ML-DSA-65 seal in its \texttt{extra\_data} field:
+\begin{enumerate}
+  \item The block proposer is determined deterministically: $\text{proposer}(h) = V[h \bmod |V|]$, where $V$ is the ordered validator set and $h$ the block height.
+  \item The seal hash is $h_{\text{seal}} = \mathrm{SHAKE\text{-}256}(\mathrm{RLP}(\text{header with empty extra\_data}))$, with \texttt{extra\_data} cleared to break the circularity between signed data and signature.
+  \item The proposer signs $h_{\text{seal}}$ with its ML-DSA-65 private key, producing a 3{,}309-byte seal, and writes it into \texttt{extra\_data}.
+  \item Validating peers recompute $h_{\text{seal}}$, look up the expected proposer for that height, and verify the seal against the proposer's public key.
+\end{enumerate}
+The choice of PoA is not a claim that proof-of-stake is unsalvageable in a post-quantum setting; it is a pragmatic deferral until lattice-based aggregable signatures reach standardization (see Section~\ref{sec:discussion}).
+
+% ============================================================
+\section{Implementation}
+\label{sec:impl}
+% ============================================================
+
+The implementation comprises four Cargo workspaces totalling roughly 18{,}000 lines of Rust and Python.
+
+\subsection{Cryptographic Library: \texttt{ml-lattice-rs}}
+
+A thin workspace with two crates: \texttt{dilithium} (ML-DSA, FIPS-204) and \texttt{kyber} (ML-KEM, FIPS-203). Both wrap the corresponding RustCrypto implementations (\texttt{ml-dsa 0.1.0-rc.8} and \texttt{ml-kem 0.2}) behind a uniform interface across the three security levels. The signing entry point uses the default hedged mode of \texttt{ml\_dsa::sign}; the deterministic mode is exposed as \texttt{sign\_deterministic} for callers that require byte-for-byte reproducibility. SHAKE-256 is imported directly from the \texttt{sha3} crate by both \texttt{pq-reth} and \texttt{pq-wallet}; it is not re-exported by \texttt{ml-lattice-rs} to avoid coupling.
+
+\subsection{Modified Reth Client: \texttt{pq-reth}}
+
+The client fork organizes the post-quantum additions into five focused crates (Table~\ref{tab:crates}). Each is consumed at the corresponding extension point of upstream reth via the trait system, minimizing intrusion on the base codebase.
+
+\begin{table}[!t]
+\caption{Post-Quantum Crates in \texttt{pq-reth} and Their Test Coverage}
+\label{tab:crates}
+\centering
+\begin{tabular}{@{}lcl@{}}
+\toprule
+\textbf{Crate} & \textbf{Tests} & \textbf{Responsibility} \\
+\midrule
+\texttt{reth-pq-primitives} & 11 & Transaction \texttt{0x50}, RLP, sender derivation \\
+\texttt{reth-pq-poa}        & 9  & PoA consensus, ML-DSA-65 seal, validator rotation \\
+\texttt{reth-pq-evm}        & 6  & EVM extension, opcode \texttt{PQHASH}, precompile table \\
+\texttt{reth-pq-precompile} & 5  & ML-DSA-65 verification precompile (\texttt{0x0100}) \\
+\texttt{reth-pq-consensus}  & 4  & Transaction admission rules (chain id, gas, signature) \\
+\midrule
+\textbf{Total} & \textbf{34} & All passing under \texttt{cargo test --release} (rustc 1.95.0) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Post-Quantum Wallet: \texttt{pq-wallet}}
+
+The wallet workspace ships five crates: a \texttt{pq-wallet-core} library (key generation, AES-256-GCM encrypted keystore with Argon2id KDF, signer, transaction builder, JSON-RPC client, error types); a \texttt{pq-wallet-cli} binary with nine subcommands (\texttt{new}, \texttt{address}, \texttt{balance}, \texttt{send}, \texttt{deploy}, \texttt{receipt}, \texttt{sign}, \texttt{call}, \texttt{export-seed}); a \texttt{pq-wallet-tui} interactive terminal interface built on \texttt{ratatui 0.29} and \texttt{crossterm 0.28}, with four tabs (wallet state, transactions, blocks, network); a \texttt{pq-e2e-test} runner for the end-to-end suite; and a \texttt{pq-chain-seeder} that primes a fresh chain with sample state for demonstrations.
+
+\subsection{Quantum Simulation Service: \texttt{qiskit-api}}
+
+A FastAPI service (Python 3.13, Qiskit 2.3) exposing the Shor and Grover simulations as REST endpoints (\texttt{POST /shor/ecdlp}, \texttt{POST /grover/keccak}, plus auxiliary \texttt{GET} endpoints for curve and hash tables). The Shor implementation uses an exact 2D modular DFT to avoid the spectral leakage that occurs when the group order is not a power of two; the Grover circuit is built natively from Qiskit gates and executed on the Aer simulator.
+
+\subsection{Deployment}
+
+A Docker Compose definition deploys a three-validator PoA cluster plus the simulation service on an isolated bridge network, with explicit trusted peers (P2P discovery disabled to make node identity deterministic). A parallel set of Kubernetes manifests deploys the same topology as a StatefulSet with per-pod config selection via an \texttt{initContainer} that reads the ordinal of the pod from its hostname. The genesis file uses \texttt{Chain ID = 20561}, \texttt{Terminal Total Difficulty = 0} (to activate the post-Merge engine API path on which the PoA scheduler attaches), and all hard forks active from block zero.
+
+% ============================================================
+\section{Quantum Simulations}
+\label{sec:quantum}
+% ============================================================
+
+The simulations validate experimentally that the threat model is concrete and reproducible, even on a small instance solvable on a classical Qiskit Aer back-end.
+
+\subsection{Shor's Algorithm on a Toy Curve}
+\label{sec:quantum_shor}
+
+We use the reduced curve $E : y^2 = x^3 + 7 \pmod{17}$, preserving the Koblitz form of secp256k1 ($a = 0$, $b = 7$) but reducing the prime to 17. Direct enumeration verifies $|E(\mathbb{F}_{17})| = 18$ (17 affine points plus $\mathcal{O}$). The Hasse bound is trivially satisfied: $|p + 1 - |E|| = |17 + 1 - 18| = 0 \leq 2\sqrt{17} \approx 8.25$.
+
+\textit{Generator selection.} The group $E(\mathbb{F}_{17})$ is cyclic of order 18; subgroup orders are $\{1, 2, 3, 6, 9, 18\}$. Exactly six affine points have order 18: $\{(6,6), (6,11), (10,2), (10,15), (15,4), (15,13)\}$. Points $(1,5)$, $(1,12)$, $(2,7)$, $(2,10)$, $(12,1)$, $(12,16)$ have order 9 and generate only a proper subgroup; selecting one of them would silently restrict the key space to $\mathbb{Z}_9$. We choose $G = (6, 11)$, verified to have order 18 by enumeration ($k \cdot G \neq \mathcal{O}$ for $k = 1, \ldots, 17$; $18 \cdot G = \mathcal{O}$).
+
+\textit{Algorithm.} For an unknown secret $k \in \{1, \ldots, 17\}$ and public $Q = k \cdot G$, the simulation prepares the coset state
+\begin{equation}
+|\psi\rangle = \frac{1}{\sqrt{18}}\sum_{b=0}^{17} \bigl|(p_0 - b k) \bmod 18\bigr\rangle_a \,|b\rangle_b,
+\label{eq:coset}
+\end{equation}
+where $p_0$ is the index of the point measured on the output register. A 2D modular DFT of size $18 \times 18$ is then applied; measuring $(s, t)$ from the resulting distribution and discarding pairs with $\gcd(s, 18) \neq 1$, the secret is recovered as $k = s^{-1} \cdot t \bmod 18$. With 4{,}096 shots, all 17 non-trivial secrets are recovered correctly. A worked example with $k = 7$ ($Q = (15, 13)$) and a measured pair $(s, t) = (5, 17)$ yields $s^{-1} = 11$, $k = 11 \cdot 17 \bmod 18 = 7$ as expected.
+
+\subsection{Grover's Algorithm on a Reduced Keccak}
+\label{sec:quantum_grover}
+
+A toy Keccak operates on an 8-bit state with a 4-bit rate, 4-bit capacity, and two rounds, yielding a 4-bit hash---a search space of $N = 16$. For a single-preimage target ($M = 1$), the optimal iteration count is $k_{\text{opt}} = \lfloor (\pi/4)\sqrt{N} \rfloor = 3$, and the algorithm finds the correct preimage with probability $>$95\% over 1{,}024 shots. For multi-preimage targets ($M > 1$), the iteration count adapts as $\lfloor (\pi/4)\sqrt{N/M} \rfloor$ and the per-shot success probability rises accordingly. Extrapolated to Keccak-256 ($N = 2^{256}$), Grover requires $\sim 2^{128}$ oracle queries~\cite{luo2024keccakquantum}, the level of post-quantum security we accept as adequate.
+
+% ============================================================
+\section{Evaluation}
+\label{sec:eval}
+% ============================================================
+
+All benchmarks were run on an AMD Ryzen~5 7600X (6 cores, 12 threads, AVX2 and AVX-512 available; \texttt{schedutil} performance governor without fixed frequency), 32~GB DDR5-5600, Linux 7.0.9 \texttt{cachyos}, \texttt{rustc 1.95.0} in \texttt{release} mode with \texttt{lto=true}, \texttt{codegen-units=1}, \texttt{target-cpu=native}. ML-DSA-65 is exercised through \texttt{ml-dsa 0.1.0-rc.8} (RustCrypto, AVX2 path when available); ECDSA over secp256k1 through \texttt{k256 0.13} (RustCrypto, pure-Rust). Numbers are medians over 100 Criterion.rs samples with MAD-based outlier rejection.
+
+\subsection{Cryptographic Latency}
+
+Table~\ref{tab:crypto_bench} compares per-operation latency.
+
+\begin{table}[!t]
+\caption{Cryptographic Operation Latency: ECDSA (k256) vs.\ ML-DSA-65}
+\label{tab:crypto_bench}
+\centering
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Operation} & \textbf{ECDSA (\textmu s)} & \textbf{ML-DSA-65 (\textmu s)} & \textbf{Ratio} \\
+\midrule
+Key generation & 35.1 & 208.5 & 5.94$\times$ slower \\
+Sign           & 41.4 & 342.8 & 8.28$\times$ slower \\
+\textbf{Verify} & \textbf{49.2} & \textbf{42.0} & \textbf{0.85$\times$ (14\% faster)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The salient result is that \emph{verification} of ML-DSA-65 is approximately 14\% faster than ECDSA verification under a like-for-like pure-Rust comparison. This is the operation that every node performs on every transaction of every block, so the result generalizes favourably to the steady-state cost of running a node. The 8.28$\times$ penalty on signing is borne by the user-side wallet, not by the network. The 5.94$\times$ penalty on key generation is paid once per account.
+
+A caveat: the comparison would shift if ECDSA were measured against \texttt{libsecp256k1} (the C implementation specifically optimized for Bitcoin), which is roughly 3--5$\times$ faster than \texttt{k256}. The qualitative conclusion (ML-DSA-65 verification is \emph{competitive} with ECDSA, not categorically slower) holds, but the specific 14\% margin is library-dependent.
+
+\subsection{Hash Functions}
+
+Table~\ref{tab:hash_bench} compares Keccak-256 (Ethereum's native hash) and SHAKE-256 (used by ML-DSA, address derivation, and \texttt{PQHASH}) across input sizes.
+
+\begin{table}[!t]
+\caption{Hash Function Latency: Keccak-256 vs.\ SHAKE-256 (nanoseconds)}
+\label{tab:hash_bench}
+\centering
+\begin{tabular}{@{}rccc@{}}
+\toprule
+\textbf{Input} & \textbf{Keccak-256} & \textbf{SHAKE-256} & \textbf{Ratio} \\
+\midrule
+32~B   & 300   & 545   & 1.82$\times$ \\
+64~B   & 304   & 560   & 1.84$\times$ \\
+128~B  & 301   & 573   & 1.90$\times$ \\
+256~B  & 555   & 802   & 1.45$\times$ \\
+512~B  & 1{,}089 & 1{,}322 & 1.21$\times$ \\
+1~KB   & 2{,}054 & 2{,}329 & 1.13$\times$ \\
+4~KB   & 8{,}130 & 8{,}100 & 1.00$\times$ \\
+8~KB   & 16{,}229 & 15{,}608 & 0.96$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The two functions share the same Keccak-$f[1600]$ permutation; they differ only in padding and initialization. SHAKE-256 carries a $\sim$250~ns constant overhead on small inputs, which dominates below 256~B. As inputs grow, the per-byte cost converges and the two functions become indistinguishable around 4~KB. The principal use case in this work---address derivation from a 1{,}952-byte public key---falls in the regime where the overhead is $\sim$10--15\%, negligible relative to the cost of the ML-DSA verification itself.
+
+\subsection{Transaction Size}
+
+Table~\ref{tab:tx_size} decomposes the per-component size of a minimal ETH transfer (empty \texttt{input}) under both schemes.
+
+\begin{table}[!t]
+\caption{Transaction Size: Classical (ECDSA) vs.\ Post-Quantum (ML-DSA-65)}
+\label{tab:tx_size}
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Component} & \textbf{Classical (B)} & \textbf{PQ (B)} \\
+\midrule
+RLP header, nonce, gas, value & 30 & 53 \\
+Recipient address             & 20 & 20 \\
+Signature                     & 65 ($v,r,s$) & 3{,}309 \\
+Public key                    & (recoverable) & 1{,}952 \\
+\midrule
+\textbf{Total (component sum)} & \textbf{115} & \textbf{5{,}334} \\
+\textbf{Total (on-the-wire)$^\dagger$} & $\sim$110 & $\sim$5{,}299 \\
+\textbf{Ratio} & \multicolumn{2}{c}{$\boldsymbol{\sim 46\times}$} \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\footnotesize $^\dagger$ RLP encodes integers $< 128$ in a single byte, so the encoded transaction is slightly smaller than the sum of maximum component sizes.
+\end{table}
+
+The $\sim$46$\times$ size increase is the dominant cost of the migration. Of the $\sim$5{,}220 added bytes, 63\% are the signature itself and 37\% the public key; a future on-chain public-key registry could amortize the latter across transactions, reducing the size penalty by approximately 37\% for recurring senders.
+
+\subsection{Throughput and Gas}
+
+Table~\ref{tab:gas_impact} converts size and gas costs into achievable throughput.
+
+\begin{table}[!t]
+\caption{Gas and Throughput Impact}
+\label{tab:gas_impact}
+\centering
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Metric} & \textbf{Classical} & \textbf{PQ} \\
+\midrule
+Gas per transfer (incl.\ calldata)         & 21{,}976 & 42{,}892 \\
+Gas for crypto verification                & 3{,}000 (\texttt{ecrecover}) & 3{,}450 (ML-DSA) \\
+Gas for calldata (sig + pk)                & $65 \times 16 = 1{,}040$ & $5{,}261 \times 16 = 84{,}176$ \\
+Total minimum per transaction              & 21{,}976 & 105{,}176 \\
+Peak TPS, mainnet (30M gas, 12~s slot)$^a$ & $\sim$114 & $\sim$24 \\
+Peak TPS, prototype (30M gas, 3~s slot)$^b$ & $\sim$455 & $\sim$95 \\
+Throughput loss (mainnet)                  & --- & $\sim$79\% \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\footnotesize $^a$ Classical: $\lfloor 30\text{M}/21{,}976\rfloor / 12 \approx 114$ TPS. PQ: $\lfloor 30\text{M}/105{,}176\rfloor / 12 \approx 24$ TPS. \\
+$^b$ Same per-block capacity; the prototype uses a 3~s slot (cf.\ Section~\ref{sec:impl}).
+\end{table}
+
+The $\sim$79\% throughput loss on a mainnet-equivalent configuration is dominated by calldata gas, not by cryptographic computation. On-chain public-key registration would reduce this loss to roughly 50\%.
+
+\subsection{End-to-End Validation}
+
+The end-to-end suite executes 15 scenarios in six phases: chain identity (3), PoA consensus (2), EIP-1559 fee model (2), PQ transactions (3), smart contracts (2), and multi-node consistency (3). In the single-node configuration, 12/12 tests pass in 26.63~s. In the three-node configuration, an additional 3/3 multi-node tests pass in 29.98~s with a measured drift bounded by 2 blocks across nodes (consistent with a 3~s slot and observed P2P propagation latency). Block-state consistency across the three nodes is verified by RPC sampling of account balances after each phase. All 34 unit tests across the five PQ crates also pass.
+
+% ============================================================
+\section{Security Analysis}
+\label{sec:security}
+% ============================================================
+
+We consider four adversary models.
+
+\subsection{Replay} A type-\texttt{0x50} transaction binds \texttt{chain\_id} and \texttt{nonce} into $h_{\text{sign}}$ (Eq.~\eqref{eq:sign_hash}) and prefixes the byte \texttt{0x50}, providing domain separation. Cross-chain replay fails because $h_{\text{sign}}$ changes with \texttt{chain\_id}; replay against the same chain fails the mempool's nonce check (\texttt{NonceTooLow}); cross-type replay fails because a payload signed for \texttt{0x50} carries the \texttt{0x50} byte inside its hash and is not interchangeable with a similarly-shaped \texttt{0x02} payload.
+
+\subsection{DoS via Transaction Inflation} The 46$\times$ size growth means an attacker can flood the mempool with proportionally more bytes for the same gas budget. Two implemented mitigations cap the damage: (i)~a per-transaction size limit of 128~KiB (inherited from reth), bounding worst-case memory; (ii)~the block gas limit (30M) implicitly limits per-block bytes to roughly $\lfloor 30\text{M}/105\text{K}\rfloor \approx 285$ transactions or $\sim$1.5~MB. A third mitigation---ordering the mempool by $\textsf{gas\_price}/\textsf{size\_bytes}$ rather than purely by \textsf{gas\_price}---is documented in the EIP draft as a recommended future addition.
+
+\subsection{Signature Malleability} ECDSA admits the structural malleability $(r, s) \leftrightarrow (r, n{-}s)$, which Ethereum patched with EIP-2's $s \leq n/2$ rule. ML-DSA-65 has no analogous structural malleability: as discussed in Section~\ref{sec:bg_mldsa}, the uniqueness of a valid signature does not depend on a signer-controlled external nonce, and no known closed-form transformation $\sigma \to \sigma'$ produces a second valid signature for the same $(m, \mathit{pk})$. Additionally, the transaction hash (Eq.~\eqref{eq:tx_hash}) covers the full envelope including $\sigma$ and $\mathit{pk}$, so a front-runner cannot replay a modified transaction under the same identifier.
+
+\subsection{Quantum Hashing Oracles} Keccak-256 (Merkle Patricia Trie, logs) and SHAKE-256 (address derivation, signing hash) both offer 256-bit outputs. Under Grover's algorithm, preimage resistance drops to $\Theta(2^{128})$, computationally infeasible. Collision resistance under the BHT algorithm is $\Theta(2^{n/3}) \approx 2^{85}$ with $\Theta(2^{85})$ memory, also infeasible but a reason to retain 256-bit outputs and not truncate. No known distinguisher reaches $< 2^{256}$ queries against Keccak-$f[1600]$.
+
+% ============================================================
+\section{Discussion and Limitations}
+\label{sec:discussion}
+% ============================================================
+
+\subsection{Limitations of the Prototype}
+
+The prototype runs on a private chain with three validators and 15 pre-funded accounts; it has not been exercised at mainnet transaction volumes or validator counts. The PoA consensus does not scale to the open-set validator population of PoS. The \texttt{0x50} type uses a flat \texttt{gas\_price} rather than the EIP-1559 dynamic fee model. Each transaction carries the full public key (no on-chain registry yet). The Shor and Grover simulations operate on reduced-size models that demonstrate the principle but not the resource cost on real curves. The cryptographic implementation has not been formally audited; the RustCrypto \texttt{ml-dsa} crate is well-tested against NIST KATs but has not, to our knowledge, undergone an independent third-party audit. Only one execution client (\texttt{reth}) is modified; a real-network migration requires the same protocol changes across \texttt{geth}, \texttt{Nethermind}, \texttt{Besu}, and \texttt{Erigon}.
+
+\subsection{The Path to PQ Proof-of-Stake}
+
+The principal obstacle to extending this work to PoS is the absence of a standardized post-quantum aggregable signature scheme. Three research directions are active. \emph{Squirrel}~\cite{fleischhacker2022squirrel} achieves logarithmic-size aggregate signatures under SIS with a synchronized setup; its successor \emph{Chipmunk}~\cite{fleischhacker2023chipmunk} refines per-signature size and verification cost. \emph{STARK-based aggregation} wraps a batch of ML-DSA verifications in a succinct STARK proof; the proof size is asymptotically constant in the number of signatures, at the cost of non-trivial prover time. None of these has yet reached the standardization maturity (NIST, ETSI, IETF) required to replace BLS12-381 at the scale of a $\sim$$10^6$-validator consensus, but their evolution should be tracked.
+
+\subsection{Account Abstraction as Complementary Path}
+
+ERC-4337~\cite{eip4337} and EIP-7702 enable smart contracts to verify arbitrary signatures, including ML-DSA-65 via the precompile at \texttt{0x0100}. These mechanisms are not a replacement for a native type (they leave consensus-layer signatures vulnerable), but they are complementary: they offer a migration path for application-layer use cases without waiting for a coordinated hard fork, and they let existing dApps adopt PQ verification per-contract.
+
+\subsection{Future Work}
+
+We identify nine concrete future-work items: an on-chain public-key registry; full EIP-1559 fields in \texttt{0x50}; investigation of PQ signature aggregation schemes; ML-DSA compression standards; large-scale load testing; consensus-layer migration; cryptographic agility (a versioning scheme that supports future PQ algorithms without a hard fork); a formal EIP submission to Ethereum Magicians and All Core Devs; cross-chain bridges with native ML-DSA verification.
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ============================================================
+
+We have presented a complete, functional implementation of a native post-quantum transaction type for an Ethereum execution client. The implementation modifies the \texttt{reth} client, introduces a new EIP-2718 type \texttt{0x50} carrying ML-DSA-65 signatures, adds a \texttt{PQHASH} opcode and an ML-DSA verification precompile to the EVM, replaces Shor-vulnerable precompiles with revert stubs, and seals blocks with ML-DSA-65 under a Proof-of-Authority consensus engine. The system is delivered with a wallet (CLI and TUI), multi-node Docker and Kubernetes deployments, a 15-scenario end-to-end test suite, and Qiskit-based simulations of Shor's and Grover's algorithms on reduced models.
+
+The empirical results support the central claim that the migration is technically viable today. ML-DSA-65 verification is approximately 14\% faster than ECDSA under a like-for-like pure-Rust comparison; the principal cost is a $\sim$46$\times$ transaction-size increase, which translates to a $\sim$79\% best-case throughput loss on a mainnet-equivalent 12-second slot. The hardest open problem is at the consensus layer: a post-quantum proof-of-stake requires aggregable lattice-based signatures that, while actively researched (Squirrel, Chipmunk, STARK-based aggregation), have not yet reached standardization.
+
+The work is released as open source, with a formal EIP draft accompanying the prototype, in the hope that it serves as a concrete reference for the inevitable migration of the Ethereum transaction layer ahead of the CRQC horizon.
+
+% ============================================================
+\section*{Acknowledgments}
+% ============================================================
+
+The author thanks the Universidad Intercontinental de la Empresa for the academic supervision of this project, and the RustCrypto maintainers for their pure-Rust implementations of ML-DSA and \texttt{k256}, which made the comparative benchmarks tractable.
+
+% ============================================================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
