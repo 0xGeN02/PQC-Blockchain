@@ -34,21 +34,28 @@ Koblitz curve SECP256k1_toy implementation:
 p = 17
 a = 0
 b = 7
-G = (12, 1)   # Base point
-n = 18        # Order of the base point G
+G = (6, 11)   # Base point (full generator of E(F_17))
+n = 18        # Order of G == |E(F_17)|
 
-Verification for G(12,1)
+Verification for G(6,11)
 ------------------------
 
-Verify that G is on the curve:
+(a) G is on the curve:
 
-y² mod p = x³ + 7 mod p
+    y² mod p = x³ + 7 mod p
+    11² mod 17 = 6³ + 7 mod 17
+    121 mod 17 = 223 mod 17
+    2 mod 17   = 2 mod 17   ✓
 
-1² mod 17 = 12³ + 7 mod 17
-1 mod 17 = 1728 + 7 mod 17
-1 mod 17 = 1735 mod 17
+(b) Order check (Hasse + scalar enumeration):
 
-1 mod 17 = 1 mod 17 (True)
+    |E(F_17)| = 18  (verified by enumeration: 17 affine + ∞)
+    Hasse:    |17 + 1 - 18| = 0  ≤  2·√17 ≈ 8.25  ✓
+    ord((6,11)) = 18 (verified by computing k·G for k=1..18; only k=18 yields ∞).
+
+    Earlier prototype used G=(12,1), which lies in a proper subgroup of order 9
+    (e.g. 9·(12,1) = ∞ while 18 was assumed). The current generator (6,11) is
+    one of six order-18 points: {(6,6), (6,11), (10,2), (10,15), (15,4), (15,13)}.
 
 Example of key generation
 -------------------------
@@ -64,7 +71,7 @@ from typing import Optional
 P: int = 17       # Field prime
 A: int = 0        # Curve coefficient a
 B: int = 7        # Curve coefficient b
-G: tuple = (12, 1)  # Base point G
+G: tuple = (6, 11)  # Base point G (full generator: ord(G) = 18 = |E(F_17)|)
 N: int = 18       # Order of G (|<G>| in the subgroup)
 
 # Sentinel for the point at infinity (identity element)

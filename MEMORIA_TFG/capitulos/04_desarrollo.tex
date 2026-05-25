@@ -15,11 +15,11 @@ El módulo \texttt{qiskit-api} es una API REST implementada con FastAPI (Python 
 
 La simulación de Shor opera sobre una curva elíptica definida en $\mathbb{F}_{17}$:
 \begin{equation}
-  E: \quad y^2 = x^3 + 7 \pmod{17}, \qquad G = (12, 1), \qquad n = 18.
+  E: \quad y^2 = x^3 + 7 \pmod{17}, \qquad G = (6, 11), \qquad n = 18.
   \label{eq:toy_curve}
 \end{equation}
 
-Esta curva preserva la estructura algebraica de secp256k1 ($a = 0$, $b = 7$) pero reduce el campo primo a 17 y el orden del grupo a 18 puntos, permitiendo la simulación en un simulador clásico sin requerir qubits reales. La aritmética de curva (adición, duplicación, multiplicación escalar) se implementa en \texttt{lib/secp256k1\_toy.py} con inversión modular por el pequeño teorema de Fermat ($a^{-1} \equiv a^{p-2} \pmod{p}$).
+Esta curva preserva la estructura algebraica de secp256k1 ($a = 0$, $b = 7$) pero reduce el campo primo a 17 y el orden del grupo a $|E(\mathbb{F}_{17})| = 18$ puntos\footnote{El cardinal del grupo se verifica por enumeración (17 afines + $\mathcal{O}$) y satisface la cota de Hasse: $|p+1 - |E|| = |17+1-18| = 0 \leq 2\sqrt{17} \approx 8{,}25$. El punto $G = (6,11)$ es uno de los seis generadores de orden 18 en $E(\mathbb{F}_{17})$ ---verificado computando $kG$ para $k=1,\ldots,18$ y comprobando que $18G = \mathcal{O}$ con $kG \neq \mathcal{O}$ para $k < 18$. Una primera iteración del prototipo utilizó $G=(12,1)$, que resultó pertenecer al subgrupo propio de orden 9 (donde $9G = \mathcal{O}$); la elección actual garantiza que el escalar $k$ pueda recorrer la totalidad de $\mathbb{Z}_{18}$.}, permitiendo la simulación en un simulador clásico sin requerir qubits reales. La aritmética de curva (adición, duplicación, multiplicación escalar) se implementa en \texttt{lib/secp256k1\_toy.py} con inversión modular por el pequeño teorema de Fermat ($a^{-1} \equiv a^{p-2} \pmod{p}$).
 
 \subsection{Algoritmo de Shor para ECDLP}
 
@@ -118,7 +118,7 @@ pub fn verify(
 
 La generación de claves utiliza \texttt{SysRng} (CSPRNG del sistema operativo vía \texttt{getrandom 0.4}) para obtener la semilla de 32 bytes que se expande internamente con SHAKE-256 para generar la matriz $\mathbf{A} \in R_q^{6 \times 5}$ y los vectores secretos $\mathbf{s}_1, \mathbf{s}_2$.
 
-La firma es determinista (sin nonce aleatorio), y la verificación delega en el \emph{trait} \texttt{Verifier} de RustCrypto, que implementa la verificación completa descrita en la Sección~\ref{sec:mldsa}: recálculo de $\mathbf{w}' = \mathbf{A}\mathbf{z} - c\mathbf{t}$, extracción de bits altos y comparación del desafío.
+La interfaz \texttt{sign(sk, msg)} delega en el modo por defecto del \emph{crate} RustCrypto, que en \texttt{ml-dsa 0.1.0-rc.8} corresponde al modo \emph{hedged} de FIPS-204: la semilla del enmascaramiento $\rho'$ se deriva de la concatenación de la clave privada, el hash del mensaje $\mu$ y 32 bytes de aleatoriedad fresca obtenidos del CSPRNG del sistema operativo. Esta elección sigue la recomendación de NIST para mitigar ataques de canal lateral por inyección de fallos en el firmante: una vulnerabilidad que extraiga el valor exacto de $\mathbf{y}$ en una firma determinista podría reproducirse en firmas futuras del mismo mensaje. El modo determinista (semilla derivada exclusivamente de $(\textsf{sk}, m)$) también está disponible y se selecciona con \texttt{ml\_dsa::sign\_deterministic}; ambos producen firmas con las mismas garantías criptográficas frente a un verificador honesto. La verificación delega en el \emph{trait} \texttt{Verifier} de RustCrypto, que implementa el procedimiento completo descrito en la Sección~\ref{sec:mldsa}: recálculo de $\mathbf{w}' = \mathbf{A}\mathbf{z} - c\mathbf{t}$, extracción de bits altos y comparación del desafío.
 
 \subsection{ML-KEM (FIPS-203)}
 
@@ -191,6 +191,16 @@ Las direcciones post-cuánticas se derivan como los últimos 20 bytes del hash S
   \texttt{address} = \text{SHAKE-256}(\mathit{pk}, 32)[12{:}32].
   \label{eq:pq_address}
 \end{equation}
+
+\subsection{Coexistencia con el modelo de comisiones EIP-1559}
+\label{sec:tx_eip1559}
+
+Una potencial fuente de confusión es que el tipo \texttt{0x50} expone un único campo \texttt{gas\_price} (modelo legacy) mientras que la suite E2E valida que <<\emph{base fee} esté presente>> (Tabla~\ref{tab:e2e_single}) y este documento afirma en \S\ref{sec:eth_accounts} que EIP-1559 <<se preserva a nivel de protocolo>>. Estos enunciados son compatibles porque corresponden a dos planos distintos del cliente:
+\begin{itemize}
+  \item \textbf{Plano del bloque}: el nodo \texttt{pq-reth} (heredado de \texttt{reth}) continúa calculando y publicando el campo \texttt{baseFeePerGas} en cada cabecera mediante la fórmula recursiva de EIP-1559. Por eso \texttt{block.baseFeePerGas} es accesible desde la EVM (opcode \texttt{BASEFEE}, \texttt{0x48}) y desde JSON-RPC, y por eso el test E2E \emph{pasa}: la base fee existe a nivel de protocolo.
+  \item \textbf{Plano de la transacción \texttt{0x50}}: el campo de comisión expuesto al firmante es un único \texttt{gas\_price} plano (modelo legacy), no la tripleta \texttt{(max\_fee\_per\_gas, max\_priority\_fee\_per\_gas, base\_fee)} del tipo \texttt{0x02}. Esto simplifica la firma post-cuántica ---reduciendo la superficie de campos cubiertos por el hash--- a costa de no aprovechar el mercado de comisiones dinámicas en la primera versión.
+\end{itemize}
+La incorporación de los dos campos dinámicos al tipo \texttt{0x50} (replicando el modelo del tipo \texttt{0x02}) es trivial desde el punto de vista de la firma, pero queda como mejora propuesta en \S\ref{sec:futuro} para no ampliar el alcance del prototipo.
 
 \subsection{Codificación RLP}
 
@@ -391,7 +401,7 @@ Durante la fase de diseño detallado se decidió consolidar el conjunto en un ú
 
   \item \textbf{ML-KEM opera en otra capa.} El mecanismo de encapsulación de claves es una primitiva de \emph{transporte} entre nodos (handshake del canal P2P para sustituir el ECDH actual de devp2p), no una operación de contrato inteligente. No existe un caso de uso natural en el que un contrato necesite ejecutar \textsf{Encaps} o \textsf{Decaps} on-chain: las claves simétricas resultantes carecen de sentido en un entorno público. Por consistencia con el principio de \emph{separación de capas}, ML-KEM se mantiene como dependencia del cliente (\texttt{ml-lattice-rs/kyber/}) pero no se expone como precompilado.
 
-  \item \textbf{Derivación de claves PQ vía opcode.} El precompilado \texttt{0x103} originalmente previsto se subsume en el opcode \texttt{PQHASH}: cualquier contrato que necesite derivar claves o identificadores a partir de SHAKE-256 puede hacerlo con una sola instrucción de bytecode, evitando el coste de invocación de un precompilado (overhead de \texttt{CALL} más argumentos de pila).
+  \item \textbf{Derivación de claves PQ vía opcode.} El precompilado \texttt{0x103} originalmente previsto se subsume en el opcode \texttt{PQHASH}: cualquier contrato que necesite derivar claves o identificadores a partir de SHAKE-256 puede hacerlo con una sola instrucción de bytecode, evitando el sobrecoste de invocar un precompilado vía \texttt{STATICCALL}. Cuantitativamente, ese sobrecoste suma al menos $G_{\texttt{call}} = 700$ gas por la propia llamada, más entre 9 y 24 gas adicionales por el \emph{warming} de la dirección del precompilado (EIP-2929: 100 gas si está \emph{warm}, 2.600 si está \emph{cold}), más 3 gas por cada palabra de \emph{calldata} preparada en pila, más el coste de copia $G_{\texttt{copy}} = 3$ por palabra de \emph{returndata}. Para una invocación típica (32 B de entrada, 32 B de salida), el sobrecoste es $\sim 800\text{--}3.300$ gas adicionales respecto al opcode equivalente, equivalente al coste de una transacción \texttt{SSTORE} de inicialización. El opcode \texttt{PQHASH} elimina por completo este \emph{overhead}: paga únicamente el coste de la operación criptográfica (30 + $6 \lceil n/32 \rceil$ gas, mismo modelo que \texttt{KECCAK256}).
 
   \item \textbf{Principio de mínima superficie criptográfica.} Cada precompilado adicional representa un punto fijo en el protocolo: una vez desplegado, su semántica no puede modificarse sin un \emph{hard fork}. Reducir el conjunto inicial al mínimo necesario (verificación ML-DSA-65) facilita la auditoría, simplifica la implementación cruzada por parte de otros clientes Ethereum (geth, Nethermind, Besu, Erigon) y deja margen para añadir nuevos precompilados de forma incremental conforme aparezcan casos de uso justificados.
 \end{enumerate}
@@ -775,7 +785,7 @@ El bloque génesis (\texttt{pq-reth/bin/pq-reth/genesis.json}) define:
   \item \textbf{Extra Data}: \texttt{0x505155414e54554d2d45564d} (ASCII: \texttt{PQUANTUM-EVM}).
   \item \textbf{Gas Limit}: 30.000.000.
   \item \textbf{Hard forks}: Todos activos desde el bloque 0 (Homestead hasta Prague).
-  \item \textbf{Terminal Total Difficulty}: 0 (Proof of Stake desde el génesis, habilitando la \emph{engine API}).
+  \item \textbf{Terminal Total Difficulty}: 0. Esta condición activa en \texttt{reth} el camino de ejecución post-\emph{Merge} ---es decir, la \emph{engine API} con \texttt{newPayload} y \texttt{forkchoiceUpdated}--- desde el bloque génesis, en lugar del bucle clásico de minado PoW. Sobre esa infraestructura se monta el consenso PoA descrito en \S\ref{sec:dev_poa}: el cliente de ejecución se comporta como si recibiera bloques de un cliente de consenso externo, pero quien los produce y firma con ML-DSA-65 es el \texttt{PoaMiningStream} interno. Esta reutilización del \emph{path} post-Merge evita reescribir el subsistema de sincronización de bloques de reth.
   \item \textbf{Cuentas prefinanciadas}: 15 cuentas (11 clásicas + 4 post-cuánticas) con 10.000 qETH cada una.
 \end{itemize}
 

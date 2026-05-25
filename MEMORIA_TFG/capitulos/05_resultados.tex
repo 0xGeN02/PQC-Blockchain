@@ -11,12 +11,12 @@ Este capítulo presenta los resultados obtenidos en cada fase del proyecto: simu
 
 \subsection{Algoritmo de Shor: recuperación de clave privada}
 
-Se ejecutó la simulación del algoritmo de Shor sobre la curva elíptica reducida $y^2 = x^3 + 7 \pmod{17}$ con generador $G = (12, 1)$ y orden $n = 18$. Para cada ejecución, se genera un par de claves aleatorio $(k, Q = k \cdot G)$ con $k \in \{1, \ldots, 17\}$ y se intenta recuperar $k$ a partir de $Q$.
+Se ejecutó la simulación del algoritmo de Shor sobre la curva elíptica reducida $y^2 = x^3 + 7 \pmod{17}$, cuyo grupo $E(\mathbb{F}_{17})$ tiene exactamente $|E(\mathbb{F}_{17})| = 18$ puntos\footnote{Verificación por enumeración explícita: 17 puntos afines y el punto en el infinito $\mathcal{O}$. La cota de Hasse $|p+1-|E|| \leq 2\sqrt{p}$ se satisface trivialmente: $|17+1-18| = 0 \leq 2\sqrt{17} \approx 8{,}25$.} y resulta ser cíclico, isomorfo a $\mathbb{Z}_{18}$. Como base se selecciona $G = (6, 11)$, un \emph{generador} de todo el grupo (orden 18, comprobado por enumeración: $k\cdot G \neq \mathcal{O}$ para $k = 1, \ldots, 17$ y $18\cdot G = \mathcal{O}$).\footnote{Existen seis puntos de orden 18 en $E(\mathbb{F}_{17})$: $\{(6,6), (6,11), (10,2), (10,15), (15,4), (15,13)\}$. Los puntos $(1,5), (1,12), (2,7), (2,10), (12,1), (12,16)$ tienen orden 9 (subgrupo propio), por lo que no son generadores válidos: tomar uno de ellos restringiría artificialmente el espacio de claves a $\mathbb{Z}_9$.} Para cada ejecución, se genera un par de claves aleatorio $(k, Q = k \cdot G)$ con $k \in \{1, \ldots, 17\}$ y se intenta recuperar $k$ a partir de $Q$.
 
 \textbf{Resultados}:
 \begin{itemize}
   \item Con 4.096 \emph{shots}, la clave privada se recupera correctamente en el 100\% de los casos probados (17/17 claves posibles).
-  \item El post-procesamiento clásico encuentra al menos un par $(s, t)$ con $\gcd(t, n) = 1$ en cada ejecución, permitiendo el cálculo directo de $k = -s \cdot t^{-1} \bmod n$.
+  \item El post-procesamiento clásico encuentra al menos un par $(s, t)$ con $\gcd(s, n) = 1$ en cada ejecución, permitiendo el cálculo directo de $k = s^{-1} \cdot t \bmod n$.
   \item El circuito pedagógico de Qiskit (con QFT de tamaño $2^5 = 32$) tiene una tasa de éxito menor ($\sim$78\%) debido a la fuga espectral causada por $n = 18 \neq 2^k$, confirmando la necesidad de DFT modular exacta para órdenes no potencia de 2.
 \end{itemize}
 
@@ -25,9 +25,9 @@ Este resultado valida experimentalmente que el algoritmo de Shor puede recuperar
 \subsubsection{Ejecución detallada paso a paso}
 \label{sec:shor_worked}
 
-Para ilustrar la mecánica del ataque se detalla a continuación una ejecución completa sobre un caso concreto. Tómese la curva reducida $E: y^2 = x^3 + 7 \pmod{17}$ con generador $G = (12, 1)$ y orden $n = 18$, y considérese la clave secreta $k = 7$ desconocida para el atacante. La clave pública correspondiente, calculada por el firmante mediante doble-y-suma a partir de la fórmula~\eqref{eq:suma_puntos} y accesible públicamente, es
+Para ilustrar la mecánica del ataque se detalla a continuación una ejecución completa sobre un caso concreto. Tómese la curva reducida $E: y^2 = x^3 + 7 \pmod{17}$ con generador $G = (6, 11)$ y orden $n = 18$, y considérese la clave secreta $k = 7$ desconocida para el atacante. La clave pública correspondiente, calculada por el firmante mediante doble-y-suma a partir de la fórmula~\eqref{eq:suma_puntos} y accesible públicamente, es
 \begin{equation}
-  Q = 7 \cdot G = (7,\, 11) \in E(\mathbb{F}_{17}).
+  Q = 7 \cdot G = (15,\, 13) \in E(\mathbb{F}_{17}).
   \label{eq:Q_example}
 \end{equation}
 El objetivo del atacante es recuperar $k = 7$ a partir de $G$ y $Q$ explotando un computador cuántico.
@@ -48,18 +48,18 @@ El objetivo del atacante es recuperar $k = 7$ a partir de $G$ y $Q$ explotando u
 \end{equation}
 Este es el \emph{estado de coset} de la ecuación~\eqref{eq:coset_state}, con el secreto $k=7$ codificado en el coeficiente del segundo registro.
 
-\paragraph{Fase 4: QFT modular bidimensional.} Se aplica la transformada $\text{QFT}_{18} \otimes \text{QFT}_{18}$ a ambos registros. La amplitud del estado $\ket{s}\ket{t}$ tras la QFT es proporcional a $\sum_b e^{2\pi i \, (s(4-7b) + tb)/18}$, que solo es no nula si
+\paragraph{Fase 4: QFT modular bidimensional.} Se aplica la transformada $\text{QFT}_{18} \otimes \text{QFT}_{18}$ a ambos registros. La amplitud del estado $\ket{s}\ket{t}$ tras la QFT es proporcional a $\sum_b e^{2\pi i \, (s(4-7b) + tb)/18} = e^{-2\pi i\, 4s/18} \sum_b e^{2\pi i (sk - t)b/18}$, que solo es no nula si\footnote{La suma geométrica $\sum_{b=0}^{n-1} \omega^{(sk-t)b}$ con $\omega = e^{2\pi i/n}$ se anula salvo cuando $sk \equiv t \pmod n$, donde vale $n$.}
 \begin{equation}
-  s \cdot (-7) + t \equiv 0 \pmod{18} \quad\Longleftrightarrow\quad t \equiv 7s \pmod{18}.
+  s \cdot k - t \equiv 0 \pmod{18} \quad\Longleftrightarrow\quad t \equiv 7s \pmod{18}.
 \end{equation}
 
-\paragraph{Fase 5: medición e inversión clásica.} Se mide $(s, t)$ obteniendo, con probabilidad uniforme entre las 18 soluciones, por ejemplo $(s, t) = (5, 17)$. Como $\gcd(t, n) = \gcd(17, 18) = 1$, se calcula
+\paragraph{Fase 5: medición e inversión clásica.} Se mide $(s, t)$ obteniendo, con probabilidad uniforme entre las 18 soluciones, por ejemplo $(s, t) = (5, 17)$. Como $\gcd(s, n) = \gcd(5, 18) = 1$, se invierte $s$ módulo $n$ y se despeja:
 \begin{align}
-  t^{-1} &\equiv 17^{-1} \equiv 17 \pmod{18},\\
-  k &\equiv -s \cdot t^{-1} \equiv -5 \cdot 17 \equiv -85 \equiv \boxed{7} \pmod{18}.
+  s^{-1} &\equiv 5^{-1} \equiv 11 \pmod{18}, \qquad (\text{ya que } 5 \cdot 11 = 55 = 3 \cdot 18 + 1)\\
+  k &\equiv s^{-1} \cdot t \equiv 11 \cdot 17 \equiv 187 \equiv \boxed{7} \pmod{18}.
 \end{align}
 
-\paragraph{Verificación.} Se comprueba que $7 \cdot G = (7, 11) = Q$, recuperando exactamente la clave secreta. El atacante ha pasado, en un número polinómico de operaciones cuánticas, del conocimiento público $Q$ al conocimiento privado $k$. La extrapolación a secp256k1 ($n \approx 2^{256}$) solo requiere escalar el número de qubits y el tamaño de la QFT; la estructura algebraica es idéntica.
+\paragraph{Verificación.} Se comprueba que $7 \cdot G = (15, 13) = Q$, recuperando exactamente la clave secreta. El atacante ha pasado, en un número polinómico de operaciones cuánticas, del conocimiento público $Q$ al conocimiento privado $k$. La extrapolación a secp256k1 ($n \approx 2^{256}$) solo requiere escalar el número de qubits y el tamaño de la QFT; la estructura algebraica es idéntica.
 
 \paragraph{Distribución de medición empírica.} La Figura~\ref{fig:dft_distribution} muestra el histograma de probabilidades de medición del primer registro tras la QFT, obtenido con 4.096 \emph{shots} sobre el simulador Aer. La distribución exhibe picos pronunciados en los múltiplos de $n / \gcd(n, k) = 18 / \gcd(18, 7) = 18$, es decir, una distribución cuasi-uniforme sobre los 18 valores posibles ---característico de claves coprimas con $n$.
 
@@ -96,7 +96,7 @@ Este es el \emph{estado de coset} de la ecuación~\eqref{eq:coset_state}, con el
   node[right, font=\scriptsize, red!70!black] {$1/18$};
 \end{axis}
 \end{tikzpicture}
-\caption{Distribución de probabilidad empírica de la medición $s$ del primer registro tras la QFT modular, con $k = 7$, $n = 18$ y 4.096 \emph{shots}. La distribución es aproximadamente uniforme sobre $\mathbb{Z}_{18}$ porque $\gcd(k,n) = 1$, lo que garantiza que cualquier muestra $(s,t)$ con $\gcd(t,n)=1$ permite recuperar $k$ unívocamente.}
+\caption{Distribución de probabilidad empírica de la medición $s$ del primer registro tras la QFT modular, con $k = 7$, $n = 18$ y 4.096 \emph{shots}. La distribución es aproximadamente uniforme sobre $\mathbb{Z}_{18}$ porque $\gcd(k,n) = 1$, lo que garantiza que cualquier muestra $(s,t)$ con $\gcd(s,n)=1$ permite recuperar $k = s^{-1}\cdot t \bmod n$ unívocamente.}
 \label{fig:dft_distribution}
 \end{figure}
 
@@ -207,7 +207,7 @@ Estado consistente (saldos) & PASS & Saldos idénticos en los 3 nodos \\
 \label{sec:res_performance}
 %% ═══════════════════════════════════════════════════════════
 
-Los benchmarks se ejecutaron con Criterion.rs en modo \emph{release} con soporte AVX2, sobre 100 muestras por operación.
+Los benchmarks se ejecutaron con Criterion.rs en modo \emph{release} con soporte AVX2, sobre 100 muestras por operación.\footnote{Plataforma de medición: AMD Ryzen 5 7600X (6 núcleos, 12 hilos, AVX2 y AVX-512 disponibles, sin frecuencia fija; modo \emph{performance} del gobernador \texttt{schedutil}), 32 GB DDR5-5600, Linux 7.0.9 \texttt{cachyos}, \texttt{rustc 1.95.0} (\emph{release} con \texttt{lto=true}, \texttt{codegen-units=1}, \texttt{target-cpu=native}). ML-DSA-65 vía \texttt{ml-dsa 0.1.0-rc.8} de RustCrypto (rama AVX2 cuando está disponible); ECDSA/secp256k1 vía \texttt{k256 0.13} de RustCrypto (también pura aritmética Rust, sin \texttt{libsecp256k1}). Tanto ML-DSA-65 como \texttt{k256} son implementaciones puras en Rust mantenidas por el mismo equipo, por lo que la comparación se realiza en igualdad de condiciones de optimización; con \texttt{libsecp256k1} (C, especialmente optimizada para Bitcoin), ECDSA sería sensiblemente más rápida y la ventaja de ML-DSA-65 desaparecería en verificación. Los números reportados son medianas sobre 100 muestras, con outliers eliminados según el criterio MAD por defecto de Criterion.}
 
 \subsection{Operaciones criptográficas}
 
@@ -309,24 +309,28 @@ La Figura~\ref{fig:shake_vs_keccak} visualiza esta convergencia: ambas funciones
 
 \begin{table}[htbp]
 \centering
-\caption{Comparativa de tamaño de transacción: clásica vs. post-cuántica.}
+\caption{Comparativa de tamaño de transacción: clásica vs. post-cuántica (transferencia ETH mínima sin \texttt{input}, codificada en RLP).}
 \label{tab:tx_size}
 \begin{tabular}{@{}lcc@{}}
 \toprule
 \textbf{Componente} & \textbf{Clásica (bytes)} & \textbf{PQ (bytes)} \\
 \midrule
-Nonce + gas + value & 30 & 53 \\
+Cabecera RLP + nonce + gas + value & 30 & 53 \\
 Dirección destino & 20 & 20 \\
 Firma & 65 $(v, r, s)$ & 3.309 \\
-Clave pública & (implícita en firma) & 1.952 \\
+Clave pública & (implícita: \texttt{ecrecover}) & 1.952 \\
 \midrule
-\textbf{Total mínimo} & \textbf{$\sim$61} & \textbf{$\sim$5.314} \\
-\textbf{Ratio} & \multicolumn{2}{c}{$\sim$87$\times$} \\
+\textbf{Total mínimo (suma de componentes)} & \textbf{115} & \textbf{5.334} \\
+\textbf{Total en el cable (RLP compacto)\textsuperscript{a}} & \textbf{$\sim$110} & \textbf{$\sim$5.299} \\
+\textbf{Ratio} & \multicolumn{2}{c}{$\boldsymbol{\sim 46\times}$} \\
 \bottomrule
 \end{tabular}
+
+\vspace{2pt}
+\footnotesize\textsuperscript{a} La codificación RLP comprime enteros pequeños a un byte cuando $< 128$, por lo que la transacción \emph{en el cable} es ligeramente menor que la suma de los tamaños máximos de cada campo. La Figura~\ref{fig:tx_bytefield} desglosa el sobre exacto.
 \end{table}
 
-El incremento de 87$\times$ en tamaño de transacción es el coste principal de la migración post-cuántica. De los 5.253 bytes adicionales, el 63\% corresponde a la firma (3.309 B) y el 37\% a la clave pública (1.952 B).
+El incremento de aproximadamente $46\times$ en tamaño de transacción es el coste principal de la migración post-cuántica. De los $\sim 5.219$ bytes adicionales, el 63\% corresponde a la firma (3.309 B) y el 37\% a la clave pública (1.952 B).
 
 La Figura~\ref{fig:tx_size_comparison} muestra visualmente la diferencia de tamaño entre ambos tipos de transacción.
 
@@ -394,22 +398,29 @@ La Figura~\ref{fig:tx_size_comparison} muestra visualmente la diferencia de tama
 Gas por transferencia & 21.976 & 42.892 \\
 Gas de verificación criptográfica & 3.000 (ecrecover) & 3.450 (ML-DSA) \\
 Gas de calldata (firma + pk) & 65 $\times$ 16 = 1.040 & 5.261 $\times$ 16 = 84.176 \\
-Gas total mínimo & 21.976 & 105.176 \\
-TPS máximo (30M gas, 12 s/bloque) & $\sim$119 & $\sim$58 \\
-Pérdida de throughput & --- & $\sim$51\% \\
-Crecimiento anual de cadena & $\sim$27 GB & $\sim$2,3 TB \\
+Gas total mínimo por transferencia & 21.976 & 105.176 \\
+TPS máximo Ethereum mainnet\textsuperscript{a} & $\sim$114 & $\sim$24 \\
+TPS máximo prototipo PQ\textsuperscript{b} & $\sim$455 & $\sim$95 \\
+Pérdida de throughput (mainnet) & --- & $\sim$79\,\% \\
+Crecimiento de la cadena (peor caso, bloques llenos)\textsuperscript{c} & $\sim$415 GB/año & $\sim$3{,}9 TB/año \\
 \bottomrule
 \end{tabular}
+
+\vspace{2pt}
+\footnotesize\textsuperscript{a} 30M gas/bloque, slot 12 s: $\lfloor 30\,\text{M}/\text{gas}\rfloor/12$. Clásica: $\lfloor 30\,\text{M}/21976\rfloor/12 \approx 114$ TPS; PQ: $\lfloor 30\,\text{M}/105176\rfloor/12 \approx 23{,}7$ TPS. \\
+\textsuperscript{b} Misma capacidad por bloque pero slot 3 s en el prototipo (\S\ref{sec:dev_infra}): clásica $\approx 455$ TPS; PQ $\approx 95$ TPS. La pérdida relativa es la misma ($\sim$79\,\%). \\
+\textsuperscript{c} Cota superior asumiendo bloques saturados todo el año: clásica $114 \cdot 115 \cdot 3{,}15 \cdot 10^7 \approx 415\,\text{GB}$; PQ $24 \cdot 5334 \cdot 3{,}15 \cdot 10^7 \approx 3{,}9\,\text{TB}$. El crecimiento real es muy inferior porque la mayoría de los bloques no se llenan al máximo.
 \end{table}
 
-La pérdida de throughput del 51\% se debe principalmente al coste de \emph{calldata} de la firma y la clave pública (84.176 gas adicionales). Estrategias de mitigación para producción incluyen: registro de claves públicas on-chain (elimina 1.952 B tras la primera transacción), compresión de claves ML-DSA, y un gas limit mayor para cadenas PQ-nativas.
+La pérdida de throughput de aproximadamente el 79\,\% se debe principalmente al coste de \emph{calldata} de la firma y la clave pública (84.176 gas adicionales por transacción). Estrategias de mitigación para producción incluyen: registro de claves públicas \emph{on-chain} (elimina 1.952 B tras la primera transacción), compresión de claves ML-DSA, y un gas limit mayor para cadenas PQ-nativas.
 
 \subsection{Calibración de gas del precompilado}
 
-El coste de gas del precompilado ML-DSA-65 (\texttt{0x0100}) se calibra como:
+El coste de gas del precompilado ML-DSA-65 (\texttt{0x0100}) se calibra a partir de la latencia medida y un factor de seguridad multiplicativo:
 \begin{equation}
-  \text{gas} = \lceil \text{latencia}_{\mu\text{s}} \times \text{ratio gas/}\mu\text{s} \times \text{factor seguridad} \rceil = \lceil 42 \times 61 \times 1,35 \rceil = 3.450.
+  \text{gas}_{\text{teórico}} = \lceil \text{latencia}_{\mu\text{s}} \times \text{ratio gas/}\mu\text{s} \times \text{factor seguridad} \rceil = \lceil 42 \times 61 \times 1{,}35 \rceil = 3.459.
 \end{equation}
+El valor adoptado en la implementación es $\text{gas}_{\text{producción}} = 3.450$, esto es, $\text{gas}_{\text{teórico}}$ redondeado hacia abajo al múltiplo de 50 más cercano por simplicidad operativa de auditoría y para alinearlo con el patrón de costes en múltiplos de 50/100 usado por otros precompilados de Ethereum (\texttt{ecrecover}: 3.000, \texttt{sha256base}: 60, \texttt{ripemd160base}: 600).
 
 Este valor es competitivo con \texttt{ecrecover} (3.000 gas) pese a que ML-DSA-65 opera sobre claves y firmas significativamente mayores, gracias a la eficiencia de la aritmética de retículos en hardware moderno con AVX2.
 
@@ -445,7 +456,7 @@ EIP-8051 \parencite{eip8051} & Ethereum & ML-DSA & No* & No & --- & Sí \\
 Las diferencias clave de este trabajo respecto al estado del arte son:
 
 \begin{enumerate}
-  \item \textbf{Tipo de transacción nativo}: Es la primera implementación que define un tipo EIP-2718 (\texttt{0x50}) para transacciones post-cuánticas en Ethereum, frente a las propuestas de verificación a nivel de contrato inteligente.
+  \item \textbf{Tipo de transacción nativo}: Es, hasta donde llega el conocimiento del autor, la primera implementación funcional de un tipo EIP-2718 post-cuántico (\texttt{0x50}) integrado en un cliente de ejecución Ethereum modificado con propagación P2P y validación multi-nodo verificable de extremo a extremo. Las propuestas en curso (EIP-7932 sobre algoritmos de firma secundarios, EIP-8051 sobre precompilado ML-DSA) operan a nivel de especificación o de contrato inteligente; este trabajo aporta el paso adicional de mostrar un cliente nativo que arranca, sella bloques con ML-DSA-65 y los propaga entre tres nodos.
   
   \item \textbf{Consenso post-cuántico}: Implementa un mecanismo de consenso (PoA) con sellado ML-DSA-65, eliminando la dependencia de BLS12-381 en la capa de bloque. Los trabajos previos en Ethereum no abordan el consenso.
   
@@ -498,7 +509,7 @@ El incremento de $\sim$87$\times$ en el tamaño mínimo de una transacción (Tab
 ECDSA presenta una maleabilidad estructural: si $(r, s)$ es válida sobre $m$, también lo es $(r, n-s)$, lo que obligó a Ethereum a introducir la restricción $s \leq n/2$ (EIP-2). ML-DSA-65 elimina esta clase de ataques por dos razones independientes:
 
 \begin{itemize}
-  \item \textbf{Firma determinista}: ML-DSA usa una semilla derivada del mensaje (la <<aleatoriedad>> proviene de $\text{SHAKE-256}(\textsf{sk} \| \mu)$) en lugar de un nonce externo. Dos firmas del mismo mensaje con la misma clave producen idéntica salida byte a byte, por lo que la unicidad de la firma es trivial.
+  \item \textbf{Unicidad estructural de firma}: FIPS-204 define dos modos de firma para ML-DSA ---\emph{determinista} (semilla derivada exclusivamente de $(\textsf{sk}, m)$ vía SHAKE-256) y \emph{hedged} (mezcla de aleatoriedad fresca con $(\textsf{sk}, m)$), siendo este último el modo por defecto en la implementación de referencia del NIST y en el \emph{crate} \texttt{ml-dsa} de RustCrypto utilizado en este trabajo. En cualquiera de los dos modos, la unicidad de la firma \textbf{no depende de un nonce externo del firmante} (como sí ocurre con el $r_{\text{nonce}}$ de ECDSA): cada firma queda íntegramente determinada por las ecuaciones de verificación del esquema, y cualquier modificación bit a bit de $(\mathbf{z}, h, c)$ invalida la verificación. En consecuencia, no existe la maleabilidad estructural tipo $(r,s) \leftrightarrow (r, n{-}s)$ característica de ECDSA: la transformación $\sigma \to \sigma'$ que produce dos firmas válidas distintas para el mismo $(m, \mathit{pk})$ no admite una formulación cerrada conocida en ML-DSA.
   
   \item \textbf{Compromiso al estado completo}: el desafío $c = H(\mu \| \mathbf{w}_1)$ liga la firma a la totalidad de los bits altos de $\mathbf{w} = \mathbf{A}\mathbf{y}$. Una alteración bit a bit de cualquier componente de $(\mathbf{z}, h, c)$ rompe la ecuación de verificación con probabilidad abrumadora.
 \end{itemize}
@@ -512,7 +523,7 @@ Las funciones hash empleadas (Keccak-256 para el MPT y los logs, SHAKE-256 para 
 \begin{itemize}
   \item \textbf{Preimagen}: el algoritmo de Grover (\S\ref{sec:grover}) reduce la complejidad a $\Theta(2^{128})$ consultas al oráculo, considerado computacionalmente infactible (un atacante necesitaría $2^{64}$ s incluso a 1 GHz de consultas oraculares).
   
-  \item \textbf{Colisión}: el algoritmo BHT (Brassard-Höyer-Tapp) consigue $\Theta(2^{n/3}) = \Theta(2^{85})$ con $\Theta(2^{85})$ memoria. Aún infactible, pero motiva no reducir el tamaño de salida por debajo de 256 bits.
+  \item \textbf{Colisión}: el algoritmo BHT \parencite{brassard1997bht} (Brassard-H\o{}yer-Tapp) consigue $\Theta(2^{n/3}) = \Theta(2^{85})$ con $\Theta(2^{85})$ memoria. Aún infactible, pero motiva no reducir el tamaño de salida por debajo de 256 bits.
   
   \item \textbf{Distinguidor}: ningún ataque distingue Keccak-$f[1600]$ de una permutación aleatoria con $< 2^{256}$ consultas, ni clásica ni cuánticamente.
 \end{itemize}
@@ -529,9 +540,9 @@ Los resultados permiten extraer las siguientes conclusiones parciales:
 
 \textbf{Viabilidad criptográfica}: La verificación ML-DSA-65 (42 $\mu$s) es más rápida que la verificación ECDSA (49,2 $\mu$s), lo que demuestra que la migración post-cuántica no implica una degradación del rendimiento de verificación ---la operación más crítica para un nodo blockchain. La firma es 8,3$\times$ más lenta, pero solo afecta al usuario final, no a la red.
 
-\textbf{Impacto en tamaño}: El incremento de 87$\times$ en tamaño de transacción es significativo pero manejable. Las firmas ML-DSA-65 (3.309 B) son más compactas que las de SLH-DSA (7.856 B) y Falcon-512 (666 B) presenta problemas de implementación segura. ML-DSA-65 ofrece el mejor equilibrio tamaño-seguridad-implementabilidad.
+\textbf{Impacto en tamaño}: El incremento de aproximadamente $46\times$ en tamaño de transacción (5{,}3 KB vs.\ 115 B para una transferencia ETH legacy codificada en RLP) es significativo pero manejable. Las firmas ML-DSA-65 (3.309 B) son más compactas que las de SLH-DSA (7.856 B) y Falcon-512 (666 B) presenta problemas de implementación segura. ML-DSA-65 ofrece el mejor equilibrio tamaño-seguridad-implementabilidad.
 
-\textbf{Impacto en throughput}: La pérdida del 51\% de TPS se debe principalmente al coste de calldata, no a la verificación criptográfica. Un registro de claves públicas (eliminando 1.952 B por transacción recurrente) reduciría esta pérdida a $\sim$35\%.
+\textbf{Impacto en throughput}: La pérdida cercana al 79\,\% de TPS (de $\sim$114 a $\sim$24 en mainnet, ver Tabla~\ref{tab:gas_impact}) se debe principalmente al coste de \emph{calldata}, no a la verificación criptográfica. Un registro de claves públicas \emph{on-chain} (eliminando 1.952 B por transacción recurrente) reduciría esta pérdida a aproximadamente el 50\,\%.
 
 \textbf{Validación E2E}: El 100\% de las pruebas (27/27 entre single-node y multi-node) pasan satisfactoriamente, demostrando que la integración de ML-DSA-65 en un cliente de ejecución Ethereum es viable sin romper las propiedades fundamentales del protocolo.
 

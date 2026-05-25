@@ -150,9 +150,9 @@ Tras la QFT, la medición produce un par $(s, t)$ donde, con alta probabilidad:
   \label{eq:shor_relation}
 \end{equation}
 
-\textbf{Post-procesamiento clásico:} Si $\gcd(t, n) = 1$, se recupera directamente:
+\textbf{Post-procesamiento clásico:} Si $\gcd(s, n) = 1$, se recupera directamente:
 \begin{equation}
-  k = -s \cdot t^{-1} \bmod n.
+  k = s^{-1} \cdot t \bmod n.
   \label{eq:key_recovery}
 \end{equation}
 Con múltiples mediciones, la probabilidad de éxito se amplifica arbitrariamente.
@@ -165,7 +165,7 @@ Para secp256k1 ($n \approx 2^{256}$), las estimaciones más recientes \parencite
 
 \subsection{Simulación sobre curva reducida}
 
-En este trabajo se simula el algoritmo de Shor sobre una curva elíptica reducida ($y^2 = x^3 + 7 \pmod{17}$, generador $G = (12, 1)$, orden $n = 18$), suficiente para demostrar la viabilidad del ataque sin requerir un computador cuántico real. La simulación utiliza Qiskit Aer con una DFT modular exacta bidimensional (ver Capítulo \ref{cap:desarrollo}).
+En este trabajo se simula el algoritmo de Shor sobre una curva elíptica reducida ($y^2 = x^3 + 7 \pmod{17}$, generador $G = (6, 11)$, orden $n = 18$ ---uno de los seis puntos de orden 18 en $E(\mathbb{F}_{17})$, ver \S\ref{sec:dev_qiskit}), suficiente para demostrar la viabilidad del ataque sin requerir un computador cuántico real. La simulación utiliza Qiskit Aer con una DFT modular exacta bidimensional (ver Capítulo \ref{cap:desarrollo}).
 
 La Figura~\ref{fig:shor_circuit} muestra la estructura del circuito cuántico para el algoritmo de Shor aplicado al ECDLP.
 
@@ -338,6 +338,8 @@ Dado un retículo $\mathcal{L}(\mathbf{B})$, encontrar un vector no nulo $\mathb
 Dado un retículo $\mathcal{L}(\mathbf{B})$ y un punto objetivo $\mathbf{t} \in \mathbb{R}^n$, encontrar $\mathbf{v} \in \mathcal{L}$ que minimice $\|\mathbf{v} - \mathbf{t}\|$.
 \end{definicion}
 
+La dureza promedio de estos problemas en \emph{instancias aleatorias} ---necesaria para que un esquema criptográfico no requiera asumir nada sobre la distribución del adversario--- se sustenta en las reducciones \emph{worst-case to average-case} de Ajtai \parencite{ajtai1996generating} y, en su forma cuantitativa moderna, en \textcite{micciancio2009worst}: cualquier algoritmo que resuelva SIS o LWE en el caso promedio implica un algoritmo para SVP aproximado en el peor caso. Esta es la propiedad estructural de la que carecen los esquemas basados en factorización y logaritmo discreto.
+
 Junto a SVP y CVP se manejan varias variantes computacionales relevantes para los esquemas post-cuánticos:
 
 \begin{itemize}
@@ -482,7 +484,7 @@ Falcon fue descartado pese a sus firmas más compactas porque su implementación
 \label{sec:mldsa}
 %% ═══════════════════════════════════════════════════════════
 
-ML-DSA (\emph{Module Lattice-Based Digital Signature Algorithm}), estandarizado como FIPS-204 \parencite{nistfips204}, es el sucesor del candidato CRYSTALS-Dilithium. Opera sobre el anillo $R_q = \mathbb{Z}_q[X]/(X^{256} + 1)$ con $q = 8.380.417$.
+ML-DSA (\emph{Module Lattice-Based Digital Signature Algorithm}), estandarizado como FIPS-204 \parencite{nistfips204}, es el resultado de la estandarización del candidato CRYSTALS-Dilithium \parencite{ducas2018dilithium}. Opera sobre el anillo $R_q = \mathbb{Z}_q[X]/(X^{256} + 1)$ con $q = 8.380.417$.
 
 \subsection{Generación de claves}
 
@@ -507,7 +509,7 @@ Para ML-DSA-65: $k = 6$, $l = 5$, $\eta = 4$, resultando en una clave pública d
   \item La firma es $(\mathbf{z}, h, c)$, donde $h$ es un \emph{hint} para la descompresión.
 \end{enumerate}
 
-El \emph{rejection sampling} es crucial: garantiza que la distribución de $\mathbf{z}$ sea independiente de los secretos $\mathbf{s}_1$, $\mathbf{s}_2$, evitando la fuga de información. La firma es \textbf{determinista} (no depende de un nonce aleatorio), eliminando la maleabilidad.
+El \emph{rejection sampling} es crucial: garantiza que la distribución de $\mathbf{z}$ sea independiente de los secretos $\mathbf{s}_1$, $\mathbf{s}_2$, evitando la fuga de información. FIPS-204 contempla dos modos de generación de la semilla del enmascaramiento $\rho'$ ---\emph{determinista}, donde $\rho' = H(\textsf{sk} \| \mu)$, y \emph{hedged}, donde $\rho' = H(\textsf{sk} \| \mu \| r)$ con $r$ una nueva semilla aleatoria de 256 bits---, siendo el modo hedged el por defecto en la implementación de referencia. En cualquiera de los dos, la \emph{aleatoriedad efectiva de la firma no depende de un nonce externo controlable por el firmante} (como sí ocurre con el $r_{\text{nonce}}$ de ECDSA), lo que elimina la maleabilidad estructural $(r, s) \leftrightarrow (r, n-s)$ propia de ECDSA: cualquier alteración de la firma rompe la ecuación de verificación con probabilidad abrumadora.
 
 \subsection{Verificación}
 
@@ -542,7 +544,7 @@ Se eligió ML-DSA-65 (nivel III, seguridad clásica de 192 bits, cuántica de 12
 \label{sec:mlkem}
 %% ═══════════════════════════════════════════════════════════
 
-ML-KEM (\emph{Module Lattice-Based Key-Encapsulation Mechanism}), estandarizado como FIPS-203 \parencite{nistfips203} en agosto de 2024, es el sucesor del candidato CRYSTALS-Kyber. A diferencia de ML-DSA (firma digital), ML-KEM es un mecanismo de \emph{encapsulación de claves}: permite a dos partes establecer una clave simétrica compartida sobre un canal inseguro sin requerir un intercambio Diffie-Hellman vulnerable a Shor. Opera sobre el mismo tipo de anillo $R_q = \mathbb{Z}_q[X]/(X^{256}+1)$ que ML-DSA, pero con $q = 3.329$ (mucho menor, optimizado para encapsulación rápida).
+ML-KEM (\emph{Module Lattice-Based Key-Encapsulation Mechanism}), estandarizado como FIPS-203 \parencite{nistfips203} en agosto de 2024, es la versión final del candidato CRYSTALS-Kyber \parencite{bos2018kyber}. A diferencia de ML-DSA (firma digital), ML-KEM es un mecanismo de \emph{encapsulación de claves}: permite a dos partes establecer una clave simétrica compartida sobre un canal inseguro sin requerir un intercambio Diffie-Hellman vulnerable a Shor. Opera sobre el mismo tipo de anillo $R_q = \mathbb{Z}_q[X]/(X^{256}+1)$ que ML-DSA, pero con $q = 3.329$ (mucho menor, optimizado para encapsulación rápida).
 
 \subsection{Generación de claves}
 
@@ -609,7 +611,7 @@ La clave compartida $K$ siempre tiene 32 bytes (256 bits), independiente del niv
 \label{sec:ethereum}
 %% ═══════════════════════════════════════════════════════════
 
-Ethereum \parencite{wood2014ethereum} es una máquina de estados replicada y determinista en la que cada nodo de la red mantiene una copia consistente del mismo \emph{estado global} y aplica sobre él una función de transición $\Upsilon$ cada vez que se ejecuta una transacción. Formalmente, si $\sigma_t$ es el estado tras el bloque $t$ y $B_{t+1}$ es el siguiente bloque (una secuencia ordenada de transacciones $T_0, T_1, \ldots, T_{m-1}$), la regla de transición es
+Ethereum \parencite{buterin2014ethereum,wood2014ethereum} es una máquina de estados replicada y determinista en la que cada nodo de la red mantiene una copia consistente del mismo \emph{estado global} y aplica sobre él una función de transición $\Upsilon$ cada vez que se ejecuta una transacción. Formalmente, si $\sigma_t$ es el estado tras el bloque $t$ y $B_{t+1}$ es el siguiente bloque (una secuencia ordenada de transacciones $T_0, T_1, \ldots, T_{m-1}$), la regla de transición es
 \begin{equation}
   \sigma_{t+1} = \Pi(\sigma_t, B_{t+1}) = \Omega\bigl(\Upsilon(\Upsilon(\ldots \Upsilon(\sigma_t, T_0) \ldots, T_{m-2}), T_{m-1}), B_{t+1}\bigr),
   \label{eq:eth_state_transition}
@@ -631,7 +633,7 @@ Ambas capas se comunican mediante la \emph{Engine API} (JSON-RPC privado). Este 
 \subsection{Modelo de cuentas y estado mundial}
 \label{sec:eth_accounts}
 
-A diferencia de Bitcoin (modelo UTXO), Ethereum emplea un modelo de cuentas basado en balances. El \emph{estado mundial} $\sigma$ es una aplicación finita
+A diferencia de Bitcoin \parencite{nakamoto2008bitcoin} (modelo UTXO), Ethereum emplea un modelo de cuentas basado en balances. El \emph{estado mundial} $\sigma$ es una aplicación finita
 \begin{equation}
   \sigma : \mathcal{A} \rightharpoonup \mathcal{A}_{\text{state}},
 \end{equation}

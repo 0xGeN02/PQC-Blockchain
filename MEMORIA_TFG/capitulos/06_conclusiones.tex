@@ -38,7 +38,7 @@ Este trabajo demuestra que la migración de la capa de transacciones de un clien
 \begin{enumerate}
   \item \textbf{La verificación post-cuántica es más rápida que la clásica.} ML-DSA-65 verifica firmas un 14\% más rápido que ECDSA/secp256k1 (42 $\mu$s vs.\ 49,2 $\mu$s), lo que significa que la migración no penaliza el rendimiento de los nodos validadores ---la operación más crítica para la escalabilidad de la red.
   
-  \item \textbf{El coste principal es el tamaño, no el cómputo.} Las transacciones post-cuánticas son $\sim$87$\times$ más grandes que las clásicas (5,3 KB vs.\ 61 B), lo que reduce el throughput teórico en un 51\%. Este es un coste significativo pero manejable, mitigable mediante registros de claves públicas y compresión.
+  \item \textbf{El coste principal es el tamaño, no el cómputo.} Las transacciones post-cuánticas son aproximadamente $46\times$ más grandes que las clásicas (5,3 KB vs.\ 115 B para una transferencia ETH \emph{legacy} codificada en RLP), lo que reduce el throughput teórico de mainnet (slot 12 s) en torno al 79\,\% (de $\sim$114 a $\sim$24 TPS) en el peor caso. Es un coste significativo pero manejable, mitigable mediante registros de claves públicas \emph{on-chain} y compresión.
   
   \item \textbf{La coexistencia clásica/PQ es posible.} El tipo de transacción \texttt{0x50} coexiste con los tipos \texttt{0x00}--\texttt{0x04} bajo EIP-2718, permitiendo una migración gradual donde los usuarios adoptan cuentas post-cuánticas voluntariamente.
   

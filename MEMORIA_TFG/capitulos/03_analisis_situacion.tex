@@ -37,7 +37,7 @@ Las cuentas que \emph{nunca} han emitido una transacción (solo han recibido fon
 
 \subsection{Análisis temporal: CRQC vs. complejidad de migración}
 
-La amenaza cuántica presenta una asimetría temporal crítica. Por un lado, las estimaciones de disponibilidad de un CRQC se sitúan en un horizonte de 10 a 15 años \parencite{nistpqc2024}. Por otro lado, una migración criptográfica completa de Ethereum requiere múltiples fases:
+La amenaza cuántica presenta una asimetría temporal crítica. Por un lado, las estimaciones de disponibilidad de un CRQC se sitúan en un horizonte de 10 a 15 años \parencite{nistpqc2024}; la encuesta anual de Mosca y Piani al panel de expertos del \emph{Global Risk Institute} sitúa la probabilidad de un CRQC en menos de 15 años por encima del 50\,\% \parencite{mosca2018cybersecurity}. Por otro lado, una migración criptográfica completa de Ethereum requiere múltiples fases:
 
 \begin{enumerate}
   \item \textbf{Investigación y estandarización} (1--3 años): Diseño de nuevos tipos de transacción, selección de algoritmos, propuestas EIP, revisión por la comunidad.
@@ -375,6 +375,15 @@ Se descartó un PoS post-cuántico por:
 \end{enumerate}
 
 La solución adoptada ---Proof of Authority con ML-DSA-65--- elimina la necesidad de agregación al restringir el conjunto de validadores a un grupo pequeño y conocido (tres nodos en la implementación de referencia). Esto permite una demostración completa de la resistencia cuántica del consenso sin las restricciones de escalabilidad del PoS.
+
+\paragraph{Estado del arte en agregación post-cuántica.} La inexistencia mencionada arriba se refiere a esquemas \emph{estandarizados} (FIPS o equivalentes); en la literatura académica existen, sin embargo, varias líneas activas que vale la pena reconocer:
+\begin{itemize}
+  \item \textbf{Squirrel} \parencite{fleischhacker2022squirrel} (CCS 2022): firma post-cuántica con agregación basada en SIS (Short Integer Solution) y árboles de hash, orientada a contextos blockchain con miles de firmantes. Las firmas individuales son de pocos cientos de bytes y la firma agregada crece logarítmicamente con el número de firmantes, pero requiere una estructura de claves comprometidas a priori (no compatible con conjuntos abiertos de validadores).
+  \item \textbf{Chipmunk} \parencite{fleischhacker2023chipmunk} (CCS 2023): refinamiento de Squirrel que reduce el tamaño de firma individual y el coste de verificación; mantiene la dependencia de un \emph{trusted setup} ligero.
+  \item \textbf{Agregación basada en STARKs}: aproximación complementaria que envuelve un conjunto de verificaciones ML-DSA en una prueba STARK sucinta. Ofrece la mejor relación tamaño/seguridad asintótica (firma agregada $\sim 100$ KB independiente del número de firmantes) pero a coste de un tiempo de probador no trivial ($\sim$segundos para $10^4$ firmas).
+  \item \textbf{Esquemas basados en hash con árboles de Merkle (XMSS, FORS variants)}: combinables mediante \emph{batch verification} pero no auténticamente agregables; el tamaño total crece linealmente con el número de firmantes aunque la verificación se acelera.
+\end{itemize}
+Ninguna de estas líneas ha alcanzado la madurez de estandarización (FIPS, ETSI, IETF) ni la velocidad de verificación necesarias para reemplazar BLS12-381 en una cadena PoS con $\sim 10^6$ validadores, pero su evolución debería seguirse de cerca durante los próximos años. El presente trabajo no las descarta como solución a largo plazo; simplemente las considera fuera de su alcance temporal.
 
 \subsection{Geth como cliente base}
 
