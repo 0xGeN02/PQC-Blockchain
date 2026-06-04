@@ -1,0 +1,149 @@
+\relax 
+\providecommand \babel@aux [2]{\global \let \babel@toc \@gobbletwo }
+\@nameuse{bbl@beforestart}
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{wood2014ethereum,buterin2014ethereum}
+\citation{shor1994}
+\citation{grover1996}
+\citation{nistfips203}
+\citation{nistfips204}
+\citation{nistfips205}
+\citation{quantumresistance2023,berdik2023survey,kiktenko2018quantumsafe}
+\citation{eip7932}
+\citation{eip8051}
+\citation{lee2024quantumsafefabric}
+\babel@aux{english}{}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{I}{1}{Introduction}{section.1}{}}
+\citation{taguchi2025coordinates}
+\citation{mosca2023quantum}
+\citation{grover1996}
+\citation{brassard1997bht}
+\citation{ajtai1996,regev2005,lenstra1982lll}
+\@writefile{toc}{\contentsline {section}{\numberline {II}Background and Threat Model}{2}{section.2}\protected@file@percent }
+\newlabel{sec:background}{{II}{2}{Background and Threat Model}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}ECDSA and the Quantum Threat to ECDLP}{2}{subsection.2.1}\protected@file@percent }
+\newlabel{sec:bg_ecdsa}{{\mbox  {II-A}}{2}{ECDSA and the Quantum Threat to ECDLP}{subsection.2.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Grover's Algorithm and Hash Functions}{2}{subsection.2.2}\protected@file@percent }
+\newlabel{sec:bg_grover}{{\mbox  {II-B}}{2}{Grover's Algorithm and Hash Functions}{subsection.2.2}{}}
+\citation{nistfips204}
+\citation{ducas2018dilithium}
+\citation{nistfips203,bos2018kyber}
+\citation{eip2718}
+\citation{eip1559}
+\citation{quantumresistance2023}
+\citation{berdik2023survey}
+\citation{eip7932}
+\citation{eip8051}
+\citation{kiktenko2018quantumsafe}
+\citation{lee2024quantumsafefabric}
+\citation{reth}
+\citation{fleischhacker2022squirrel}
+\citation{fleischhacker2023chipmunk}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Lattice-Based Cryptography and ML-DSA}{3}{subsection.2.3}\protected@file@percent }
+\newlabel{sec:bg_mldsa}{{\mbox  {II-C}}{3}{Lattice-Based Cryptography and ML-DSA}{subsection.2.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}Typed Transactions and the EVM Substrate}{3}{subsection.2.4}\protected@file@percent }
+\newlabel{sec:bg_evm}{{\mbox  {II-D}}{3}{Typed Transactions and the EVM Substrate}{subsection.2.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {III}Related Work}{3}{section.3}\protected@file@percent }
+\newlabel{sec:related}{{III}{3}{Related Work}{section.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {IV}System Design}{4}{section.4}\protected@file@percent }
+\newlabel{sec:design}{{IV}{4}{System Design}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Transaction Type \texttt  {0x50}}{4}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:design_tx}{{\mbox  {IV-A}}{4}{Transaction Type \texttt {0x50}}{subsection.4.1}{}}
+\newlabel{eq:sign_hash}{{1}{4}{Transaction Type \texttt {0x50}}{equation.1}{}}
+\newlabel{eq:tx_hash}{{2}{4}{Transaction Type \texttt {0x50}}{equation.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Address Derivation}{4}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:design_addr}{{\mbox  {IV-B}}{4}{Address Derivation}{subsection.4.2}{}}
+\newlabel{eq:address}{{3}{4}{Address Derivation}{equation.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Opcode \texttt  {PQHASH} (\texttt  {0x21})}{4}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:design_pqhash}{{\mbox  {IV-C}}{4}{Opcode \texttt {PQHASH} (\texttt {0x21})}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}ML-DSA-65 Verification Precompile (\texttt  {0x0100})}{5}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:design_precompile}{{\mbox  {IV-D}}{5}{ML-DSA-65 Verification Precompile (\texttt {0x0100})}{subsection.4.4}{}}
+\newlabel{eq:gas_calib}{{4}{5}{ML-DSA-65 Verification Precompile (\texttt {0x0100})}{equation.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Disabled Precompiles}{5}{subsection.4.5}\protected@file@percent }
+\newlabel{sec:design_disabled}{{\mbox  {IV-E}}{5}{Disabled Precompiles}{subsection.4.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Proof-of-Authority Consensus with ML-DSA-65 Seals}{5}{subsection.4.6}\protected@file@percent }
+\newlabel{sec:design_consensus}{{\mbox  {IV-F}}{5}{Proof-of-Authority Consensus with ML-DSA-65 Seals}{subsection.4.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Implementation}{5}{section.5}\protected@file@percent }
+\newlabel{sec:impl}{{V}{5}{Implementation}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Cryptographic Library: \texttt  {ml-lattice-rs}}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Post-Quantum Crates in \texttt  {pq-reth} and Their Test Coverage}}{6}{table.1}\protected@file@percent }
+\newlabel{tab:crates}{{I}{6}{Post-Quantum Crates in \texttt {pq-reth} and Their Test Coverage}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Modified Reth Client: \texttt  {pq-reth}}{6}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Post-Quantum Wallet: \texttt  {pq-wallet}}{6}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-D}}Quantum Simulation Service: \texttt  {qiskit-api}}{6}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-E}}Deployment}{6}{subsection.5.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Quantum Simulations}{6}{section.6}\protected@file@percent }
+\newlabel{sec:quantum}{{VI}{6}{Quantum Simulations}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Shor's Algorithm on a Toy Curve}{6}{subsection.6.1}\protected@file@percent }
+\newlabel{sec:quantum_shor}{{\mbox  {VI-A}}{6}{Shor's Algorithm on a Toy Curve}{subsection.6.1}{}}
+\citation{luo2024keccakquantum}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Cryptographic Operation Latency: ECDSA (k256) vs.\ ML-DSA-65}}{7}{table.2}\protected@file@percent }
+\newlabel{tab:crypto_bench}{{II}{7}{Cryptographic Operation Latency: ECDSA (k256) vs.\ ML-DSA-65}{table.2}{}}
+\newlabel{eq:coset}{{5}{7}{Shor's Algorithm on a Toy Curve}{equation.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Grover's Algorithm on a Reduced Keccak}{7}{subsection.6.2}\protected@file@percent }
+\newlabel{sec:quantum_grover}{{\mbox  {VI-B}}{7}{Grover's Algorithm on a Reduced Keccak}{subsection.6.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Evaluation}{7}{section.7}\protected@file@percent }
+\newlabel{sec:eval}{{VII}{7}{Evaluation}{section.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-A}}Cryptographic Latency}{7}{subsection.7.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Hash Function Latency: Keccak-256 vs.\ SHAKE-256 (nanoseconds)}}{8}{table.3}\protected@file@percent }
+\newlabel{tab:hash_bench}{{III}{8}{Hash Function Latency: Keccak-256 vs.\ SHAKE-256 (nanoseconds)}{table.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Transaction Size: Classical (ECDSA) vs.\ Post-Quantum (ML-DSA-65)}}{8}{table.4}\protected@file@percent }
+\newlabel{tab:tx_size}{{IV}{8}{Transaction Size: Classical (ECDSA) vs.\ Post-Quantum (ML-DSA-65)}{table.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-B}}Hash Functions}{8}{subsection.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-C}}Transaction Size}{8}{subsection.7.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-D}}Throughput and Gas}{8}{subsection.7.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VII-E}}End-to-End Validation}{8}{subsection.7.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Gas and Throughput Impact}}{9}{table.5}\protected@file@percent }
+\newlabel{tab:gas_impact}{{V}{9}{Gas and Throughput Impact}{table.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VIII}Security Analysis}{9}{section.8}\protected@file@percent }
+\newlabel{sec:security}{{VIII}{9}{Security Analysis}{section.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-A}}Replay}{9}{subsection.8.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-B}}DoS via Transaction Inflation}{9}{subsection.8.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-C}}Signature Malleability}{9}{subsection.8.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-D}}Quantum Hashing Oracles}{9}{subsection.8.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IX}Discussion and Limitations}{9}{section.9}\protected@file@percent }
+\newlabel{sec:discussion}{{IX}{9}{Discussion and Limitations}{section.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-A}}Limitations of the Prototype}{9}{subsection.9.1}\protected@file@percent }
+\citation{fleischhacker2022squirrel}
+\citation{fleischhacker2023chipmunk}
+\citation{eip4337}
+\bibstyle{IEEEtran}
+\bibdata{references}
+\bibcite{wood2014ethereum}{1}
+\bibcite{buterin2014ethereum}{2}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-B}}The Path to PQ Proof-of-Stake}{10}{subsection.9.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-C}}Account Abstraction as Complementary Path}{10}{subsection.9.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-D}}Future Work}{10}{subsection.9.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {X}Conclusion}{10}{section.10}\protected@file@percent }
+\newlabel{sec:conclusion}{{X}{10}{Conclusion}{section.10}{}}
+\bibcite{shor1994}{3}
+\bibcite{grover1996}{4}
+\bibcite{nistfips203}{5}
+\bibcite{nistfips204}{6}
+\bibcite{nistfips205}{7}
+\bibcite{quantumresistance2023}{8}
+\bibcite{berdik2023survey}{9}
+\bibcite{kiktenko2018quantumsafe}{10}
+\bibcite{eip7932}{11}
+\bibcite{eip8051}{12}
+\bibcite{lee2024quantumsafefabric}{13}
+\bibcite{taguchi2025coordinates}{14}
+\bibcite{mosca2023quantum}{15}
+\bibcite{brassard1997bht}{16}
+\bibcite{ajtai1996}{17}
+\bibcite{regev2005}{18}
+\bibcite{lenstra1982lll}{19}
+\bibcite{ducas2018dilithium}{20}
+\bibcite{bos2018kyber}{21}
+\bibcite{eip2718}{22}
+\bibcite{eip1559}{23}
+\bibcite{reth}{24}
+\bibcite{fleischhacker2022squirrel}{25}
+\bibcite{fleischhacker2023chipmunk}{26}
+\bibcite{luo2024keccakquantum}{27}
+\bibcite{eip4337}{28}
+\@writefile{toc}{\contentsline {section}{References}{11}{section*.7}\protected@file@percent }
+\gdef \@abspage@last{11}
