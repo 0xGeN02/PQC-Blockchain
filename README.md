@@ -128,6 +128,10 @@ Sends transfers (varying amounts), deploys a SimpleStorage contract, and makes s
 
 ## Architecture
 
+<div align="center">
+  <img src="docs/architecture.png" alt="PostQuantumEVM Architecture" width="100%">
+</div>
+
 ```
 PostQuantumEVM/
 ├── pq-reth/                        # Forked reth (git submodule)
